@@ -22,13 +22,13 @@ export async function detectFrame(models,frame){
  pose.boxes.forEach((b,i)=>{const a=(b.x2-b.x1)*(b.y2-b.y1);if(a>area){area=a;index=i}});
  return {person:index<0?null:pose.boxes[index],points:index<0?null:pose.keypoints[index]?.points,objects:objects.boxes};
 }
-export function drawOverlay(canvas,result){
+export function drawOverlay(canvas,result,mode='body'){
  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
  const {person,points,held}=result;if(!person)return;
  ctx.lineWidth=2;ctx.strokeStyle=result.review?'#ff4545':'#b6f5bb';
- ctx.strokeRect(person.x1,person.y1,person.x2-person.x1,person.y2-person.y1);
+ if(mode!=='arms')ctx.strokeRect(person.x1,person.y1,person.x2-person.x1,person.y2-person.y1);
  const edges=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
- for(const [a,b] of edges){if(points?.[a]?.[2]>.4&&points?.[b]?.[2]>.4){ctx.beginPath();ctx.moveTo(...points[a].slice(0,2));ctx.lineTo(...points[b].slice(0,2));ctx.stroke()}}
- for(const p of points||[]){if(p[2]>.4){ctx.beginPath();ctx.arc(p[0],p[1],3,0,Math.PI*2);ctx.fillStyle='#d9ffdc';ctx.fill()}}
+ for(const [a,b] of edges.filter(([a,b])=>mode!=='arms'||[5,6,7,8,9,10].includes(a)&&[5,6,7,8,9,10].includes(b))){if(points?.[a]?.[2]>.4&&points?.[b]?.[2]>.4){ctx.beginPath();ctx.moveTo(...points[a].slice(0,2));ctx.lineTo(...points[b].slice(0,2));ctx.stroke()}}
+ for(const [i,p] of (points||[]).entries()){if(mode==='arms'&&![5,6,7,8,9,10].includes(i))continue;if(p[2]>.4){ctx.beginPath();ctx.arc(p[0],p[1],3,0,Math.PI*2);ctx.fillStyle='#d9ffdc';ctx.fill()}}
  if(held){ctx.strokeStyle='#f2ce65';ctx.strokeRect(held.x1,held.y1,held.x2-held.x1,held.y2-held.y1);ctx.fillStyle='#f2ce65';ctx.font='16px monospace';ctx.fillText(held.name,held.x1,Math.max(18,held.y1-8))}
 }

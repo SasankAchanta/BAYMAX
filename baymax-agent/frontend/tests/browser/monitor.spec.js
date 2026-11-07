@@ -60,3 +60,31 @@ test('WebGPU distribution loads asyncify modules and executes WASM inference',as
  expect(loaded.some(url=>url.endsWith('ort-wasm-simd-threaded.asyncify.mjs'))).toBe(true);
  expect(loaded.some(url=>url.endsWith('ort-wasm-simd-threaded.asyncify.wasm'))).toBe(true);
 });
+
+
+test('focus modes switch without restarting camera and real face blendshapes run',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const faceRequests=[];page.on('request',r=>{if(r.url().includes('face_landmarker.task'))faceRequests.push(r.url())});
+ await page.goto('/');
+ await expect(page.locator('.bottom')).toContainText('local inference',{timeout:90000});
+ expect(faceRequests).toEqual([]);
+ await page.getByRole('button',{name:'Arm / Hand',exact:true}).click();
+ await expect(page.locator('.modeStatus')).toContainText('Arm / Hand');
+ await expect(page.locator('.videoLabel')).toContainText('ARM / HAND');
+ await page.getByRole('button',{name:'Face / Head',exact:true}).click();
+ await expect(page.locator('.bottom')).toContainText('MediaPipe Face',{timeout:60000});
+ await expect(page.locator('.summary')).toContainText('Move your face into view',{timeout:20000});
+ expect(faceRequests.length).toBeGreaterThan(0);
+ const detected=await page.evaluate(async()=>{
+  const {loadFaceModel}=await import('/src/face.js');
+  const image=new Image();image.src='/tests/fixtures/face.jpg';await image.decode();
+  const model=await loadFaceModel();const result=model.detectForVideo(image,performance.now()+1);
+  return {landmarks:result.faceLandmarks[0]?.length,blendshapes:result.faceBlendshapes[0]?.categories.map(c=>c.categoryName)};
+ });
+ expect(detected.landmarks).toBeGreaterThan(400);
+ expect(detected.blendshapes).toEqual(expect.arrayContaining(['eyeBlinkLeft','eyeBlinkRight','mouthSmileLeft','mouthFrownRight','browInnerUp']));
+ await page.getByRole('button',{name:'Full Body',exact:true}).click();
+ await expect(page.locator('.bottom')).toContainText('YOLO11',{timeout:20000});
+ await expect(page.locator('header')).toContainText('CAMERA / VIDEO ON');
+ expect(errors).toEqual([]);
+});

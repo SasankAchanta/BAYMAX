@@ -7,11 +7,14 @@
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test tests/activity.test.js",
+    "test": "node --test tests/*.test.js",
     "test:browser": "playwright test",
-    "runtime:sync": "node scripts/sync-runtime.mjs"
+    "runtime:sync": "node scripts/sync-runtime.mjs",
+    "postinstall": "node scripts/sync-mediapipe.mjs",
+    "prebuild": "node scripts/sync-mediapipe.mjs"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "1.2.2",
     "@ultralytics/yolo": "0.0.56",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

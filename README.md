@@ -20,6 +20,16 @@ The webcam starts on page load and remains visible while models initialize. Use 
 
 If a tab previously failed WASM initialization, hard-refresh it with Ctrl+Shift+R after updating the assets; a failed runtime remains cached in that page's JavaScript state. Browser tests run with GPU disabled and GPU allowed, verify automatic CPU fallback if no adapter is available, and verify that runtime URLs return real assets rather than Vite's HTML fallback. A separate test loads the WebGPU JS distribution and performs YOLO inference through its asyncify WASM backend even without a GPU adapter.
 
+## Focus modes
+
+Buttons above the feed select **Full Body**, **Arm / Hand**, or **Face / Head**. The active mode and current action score appear on the video. Mode/source changes reset histories; the camera stays running during mode changes. Fall review only runs in Full Body mode.
+
+- **Full Body:** existing actions plus `SITTING_HEAD_DOWN` after a seated person's visible nose/ears remain near or below shoulder height and stationary for >3 seconds. `LIMPING` uses left/right ankle-to-hip vertical excursion asymmetry in a rolling 2.5-second window, requires walking evidence and enough visible samples. It describes a movement pattern, not an injury diagnosis.
+- **Arm / Hand:** shoulder/elbow/wrist overlay; `GUARDING_ARM` after a visible wrist remains near the chest/torso for >1.5 seconds, plus `ARM_RAISED`, `ARMS_RELAXED`, and explicit unclear states. Hips and legs are not required. YOLO pose has wrist landmarks, not individual finger landmarks.
+- **Face / Head:** lazily loads local MediaPipe FaceLandmarker with blendshapes enabled. `EYES_CLOSED` requires both blink scores >0.6 continuously for >1.5 seconds. The expression estimate is `HAPPY` for dominant smile, `SAD` for dominant frown/inner-brow evidence, otherwise `NEUTRAL`. The HUD displays expression and heuristic confidence separately from eye closure. These describe facial appearance, not a person's internal mood. Missing face/blendshapes or observation gaps reset the eye timer.
+
+MediaPipe uses a pinned npm version and bundled `face_landmarker.task`; matching WASM assets copy from the installed package on install/build. Everything runs locally without an API key. Face inference is only active in Face / Head mode; its model is cached for later switches.
+
 ## What it detects
 
 - **Standing / sitting:** torso and knee geometry from YOLO11 COCO pose keypoints. Show the full body for useful posture labels. Missing joints produce “Unclear / other.”
