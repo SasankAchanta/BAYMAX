@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+*.pt
+*.mp3
+
+# Browser test outputs
+playwright-report/
+test-results/
+baymax-agent/frontend/tests/fixtures/browser-monitor.png
