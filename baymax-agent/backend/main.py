@@ -13,6 +13,7 @@ from .vision import Vision
 from .tools import Tools
 from .agent import Agent, ProactiveVision, proactive_vision_enabled
 from .voice import is_acknowledgement
+from .voice_turn import router as voice_router
 
 load_dotenv(Path(__file__).with_name('.env'))
 clients = set()
@@ -93,7 +94,8 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Baymax safety companion", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET"], allow_headers=["*"])
+app.include_router(voice_router)
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["*"])
 
 @app.get('/health')
 async def health():

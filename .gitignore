@@ -11,3 +11,6 @@ dist/
 playwright-report/
 test-results/
 baymax-agent/frontend/tests/fixtures/browser-monitor.png
+
+# Private health decision history
+baymax_decisions.txt

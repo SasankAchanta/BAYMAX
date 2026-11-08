@@ -4,6 +4,7 @@ import {ActivityTracker,LABELS} from './activity';
 import {FocusTracker,FaceTracker} from './focus';
 import {loadModels,detectFrame,drawOverlay} from './vision';
 import './style.css';
+import VoicePanel from './VoicePanel';
 const empty={scores:LABELS.map(label=>({label,score:0})),summary:'Starting the camera. Allow camera access in your browser.',lyingSeconds:0,review:false};
 function App(){
  const video=useRef(),overlay=useRef(),stream=useRef(),models=useRef(),tracker=useRef(new ActivityTracker()),generation=useRef(0),sourceUrl=useRef(),mounted=useRef(true);
@@ -11,6 +12,17 @@ function App(){
  const [mode,setMode]=useState('body'),[faceReady,setFaceReady]=useState(false);
  const focus=useRef(new FocusTracker()),faceTracker=useRef(new FaceTracker()),faceModel=useRef(),faceDraw=useRef();
  const modeName={body:'Full Body',arms:'Arm / Hand',face:'Face / Head'}[mode];
+ async function inspectForVoice(request,signal){
+  if(!['body','arms','face'].includes(request.mode))throw new Error('Invalid inspection mode.');
+  if(signal.aborted)throw new DOMException('Cancelled','AbortError');
+  const v=video.current;
+  if(!v?.srcObject||v.readyState<2||!stream.current?.active)throw new Error('A live webcam is required for a visual checkup. Start the camera and try again.');
+  changeMode(request.mode);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(signal.aborted)throw new DOMException('Cancelled','AbortError');
+  const canvas=document.createElement('canvas'),scale=Math.min(1,960/v.videoWidth);canvas.width=Math.round(v.videoWidth*scale);canvas.height=Math.round(v.videoHeight*scale);canvas.getContext('2d').drawImage(v,0,0,canvas.width,canvas.height);
+  return {mode:request.mode,image:canvas.toDataURL('image/jpeg',.8).split(',')[1]};
+ }
  function changeMode(next){if(next===mode)return;generation.current++;reset();setError('');setMode(next)}
  useEffect(()=>{if(mode!=='face')return;let cancelled=false;setStatus('Loading face model…');import('./face').then(async module=>{const model=await module.loadFaceModel();if(!cancelled){faceModel.current=model;faceDraw.current=module.drawFace;setFaceReady(true);setStatus('MediaPipe Face · CPU · local inference')}}).catch(e=>{if(!cancelled)setError(`Face model could not load: ${e.message||e}`)});return()=>{cancelled=true}},[mode]);
  const detectorReady=mode==='face'?faceReady:ready;
@@ -68,10 +80,11 @@ function App(){
  return <main><header><h1>BAYMAX <span>/ ACTIVITY MONITOR</span></h1><span className={running?'live':''}>{running?'● CAMERA / VIDEO ON':'○ CAMERA OFF'}</span></header>
  <section className="monitor"><div className="focusModes" role="group" aria-label="Focus mode">{[['body','Full Body'],['arms','Arm / Hand'],['face','Face / Head']].map(([key,name])=><button key={key} aria-pressed={mode===key} onClick={()=>changeMode(key)}>{name}</button>)}</div><div className="modeStatus">ACTIVE MODE: {modeName}{mode==='face'&&result.expression&&<span>EXPRESSION: {result.expression} ({result.expressionConfidence}%)</span>}</div><div className="videoWrap"><video ref={video} autoPlay muted playsInline onEnded={()=>{setRunning(false);tracker.current.reset();setResult({...empty,summary:'Video ended. Start the camera or choose another clip.'})}} onError={()=>setError('This video could not be played. Choose a browser-supported MP4 or WebM.')} /><canvas ref={overlay}/>{!running&&<div className="placeholder">{error?'CAMERA UNAVAILABLE':'WAITING FOR CAMERA'}</div>}<div className={'videoLabel '+(result.review?'danger':'')}>{modeName.toUpperCase()} / {detectorReady&&running?top?.label:'LOADING DETECTOR'}{detectorReady&&running&&<span>{top?.score}%</span>}</div></div>
  <div className="controls"><button onClick={()=>startCamera(selected)}>Start camera</button><button onClick={stop} disabled={!running}>Stop</button>{cameras.length>1&&<select aria-label="Camera" value={selected} onChange={e=>{setSelected(e.target.value);startCamera(e.target.value)}}>{cameras.map(c=><option key={c.deviceId} value={c.deviceId}>{c.label||'Camera'}</option>)}</select>}<label className="fileButton">Test a video<input type="file" accept="video/*" onChange={useClip}/></label><label className="toggle"><input type="checkbox" checked={skeleton} onChange={e=>setSkeleton(e.target.checked)}/> Skeleton</label></div>
+ <VoicePanel result={result} mode={mode} running={running} inspect={inspectForVoice}/>
  {error&&<p role="alert" className="error">{error}</p>}<p className="summary" aria-live="polite">{result.summary}</p>
  <div className="metrics"><div>TIME<span>{String(Math.floor(elapsed)).padStart(3,'0')} S</span></div><div>FRAMES<span>{String(frames).padStart(4,'0')}</span></div><div>INFERENCE<span>{latency?`${Math.round(latency)} MS`:'—'}</span></div><div>{mode==='face'?'EYES CLOSED TIMER':'LYING TIMER'}<span>{mode==='face'?`${(result.eyesSeconds||0).toFixed(1)} / 1.5 S`:mode==='body'?`${result.lyingSeconds.toFixed(1)} / 15 S`:'NOT IN THIS MODE'}</span></div></div>
  {mode==='body'&&<div className={'review '+(result.review?'danger':'')} role="status">{result.review?'POSSIBLE FALL · UNDER REVIEW':result.lyingSeconds>0?'LYING / RESTING · OBSERVING':'NO FALL UNDER REVIEW'}<span>{result.review?'Continuous lying exceeds 15 seconds. Check on the person.':'Review requires more than 15 continuous seconds lying down.'}</span></div>}
  <div className="ranking">{result.scores.map(({label,score},i)=><div key={label} className={'row '+(i===0?'leading ':'')+(label==='POSSIBLE FALL · REVIEW'&&result.review?'danger':'')}><div className="bar" style={{width:`${score}%`}}/><span>{score.toFixed(1)}%</span><strong>{label}</strong></div>)}</div>
- <div className="bottom"><span>{status}</span><span>{cameraName}</span></div><p className="note">Single-person prototype · Choose the focus mode for the body region in view. Face expressions do not establish mood; guarding and limping are movement patterns, not diagnoses. Fall review only runs in Full Body mode. Scores measure heuristic evidence, not action probabilities. Holding is inferred from an object near a wrist. Lying still may be resting; sleep cannot be confirmed. Frames stay in this browser. No API key or Python server needed.</p></section></main>
+ <div className="bottom"><span>{status}</span><span>{cameraName}</span></div><p className="note">Single-person prototype · Choose the focus mode for the body region in view. Face expressions do not establish mood; guarding and limping are movement patterns, not diagnoses. Fall review only runs in Full Body mode. Scores measure heuristic evidence, not action probabilities. Holding is inferred from an object near a wrist. Lying still may be resting; sleep cannot be confirmed. Pose/face inference stays local; requested checkup frames go to NVIDIA. Vision runs without a server. Voice conversation requires the local FastAPI voice API and NVIDIA key.</p></section></main>
 }
 createRoot(document.getElementById('root')).render(<App/>);

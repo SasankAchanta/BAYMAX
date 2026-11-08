@@ -1,4 +1,5 @@
 import os
+from .decision_log import log_decision
 from datetime import datetime, timedelta, timezone
 import httpx
 
@@ -29,6 +30,7 @@ class Tools:
                     result.update(mode="demo_sms", message="Demo SMS sent to configured contact")
                 except Exception:
                     result["error"] = "SMS delivery failed; no delivery confirmed."
+        log_decision("alert", symptoms=reason, next_steps=result.get("error") or result["message"])
         await self.emit("alert", result)
         return result
 
@@ -39,11 +41,13 @@ class Tools:
                 selected.append({"id": key.lower(), **CATALOG[key.lower()], "currency": "USD", "price_source": "illustrative mock catalog", "dosage": "Not applicable — non-drug supply", "url": "https://www.fda.gov/consumers/consumer-updates", "order_executed": False})
         self.items = selected
         result = {"symptom": symptom, "items": selected, "order_executed": False}
+        log_decision("care_kit", symptoms=symptom, items=[i["name"] for i in selected], next_steps="Review only; no purchase executed.")
         await self.emit("care_kit", result)
         return result
 
     async def schedule_doctor_followup(self, urgency, notes):
         result = {"mock": True, "title": "Doctor follow-up", "suggested_start": (datetime.now(timezone.utc)+timedelta(days=1)).isoformat(), "urgency": urgency, "notes": notes, "booked": False}
+        log_decision("doctor_visit", symptoms=notes, next_steps=f"{urgency} mock follow-up suggested; no appointment booked.")
         await self.emit("followup", result)
         return result
 

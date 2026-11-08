@@ -14,6 +14,32 @@ Open http://127.0.0.1:5173 and allow camera access. Keep the terminal open. If p
 
 The webcam starts on page load and remains visible while models initialize. Use **Start camera** to retry permissions, **Stop** to release the camera, or the selector to change cameras. **Test a video** analyzes a local clip with the same detector; it switches off the webcam until Start camera is clicked. Clips do not loop, and source changes reset all activity history. Video inference uses clip time for the lying timer. Hidden tabs reset observation continuity. The optional skeleton aligns with the camera aspect ratio.
 
+## Hands-free voice and visual checkups
+
+The voice assistant automatically attempts continuous idle recognition (`continuous=true`, `interimResults=true`) when the page opens. Say **Hey Baymax** or **Baymax** to hear “Hello, I am Baymax. How can I help?” Spoken replies alternate with microphone listening. Recognition is aborted, its handlers detached, and pending restart timers cleared before speech. After a conversation closes, idle wake listening resumes. **Pause / Mute Voice** cancels speech, microphone recognition, and pending requests; **Resume Voice** restores listening. No text chatbot or start-conversation button is required.
+
+Chrome/Edge may require microphone permission or a user gesture before the first automatic recognition or speech. If blocked, the status tells you to allow the microphone and use Resume Voice once. Browser recognition may use a remote speech service and can stop when the tab/device is suspended; automatic restart is attempted on normal recognition end. Permission or service errors pause listening rather than continually prompting.
+
+Symptom/injury phrases trigger an inspection request from `/api/voice-turn`: hand/arm/wrist -> Arm / Hand, face/head/dizziness -> Face / Head, other body symptoms -> Full Body. The frontend switches mode, captures a fresh <=960px JPEG from the live webcam, and resubmits the same turn with that image. A video-file preview cannot substitute for the live webcam. The server sends the image to `NVIDIA_VISION_MODEL`, then gives its findings and conversation context to `NVIDIA_MODEL` for a short spoken follow-up. Missing/failed visual inference is identified as unavailable, never as a successful observation. No image is stored. Focus selection uses symptom rules, not a medical diagnosis.
+
+Run the voice-only FastAPI entry point (it never opens the server camera):
+
+```powershell
+cd "C:\Users\sacha\OneDrive\Desktop\AI Projects\BAYMAX\baymax-agent"
+.\.venv\Scripts\python -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python -m uvicorn backend.voice_api:app --host 127.0.0.1 --port 8000
+```
+
+Keep `npm run dev` running in the frontend terminal. Vite proxies `/api` to port 8000. Configure `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, and `NVIDIA_VISION_MODEL` in `backend/.env`, then restart FastAPI. Keys never enter the frontend. Production hosting must likewise route `/api` to FastAPI. Current voice requests allow up to 65 seconds for the visual + text calls; each provider call times out after 25 seconds.
+
+## Decision log
+
+Decisions append to **`baymax_decisions.txt` in the repository root**, using ISO timestamps in `America/Chicago` (with timezone offset). Entries include reported symptoms/recent user context, vision findings, review-only supplies, and next steps. Voice responses use validated structured JSON to distinguish a concrete decision from casual conversation. Existing Care Kit, mock doctor-follow-up, and alert tools also log their completed action/delivery status. No purchases, prescriptions or automatic doctor bookings occur.
+
+The log is a persistent local health history and is excluded from Git. Images, audio and internal reasoning are not logged. Conversation history otherwise stays in browser memory and clears when the conversation ends. Tests use temporary isolated logs, never the real decision history. Remove the local file manually if you want to clear it; it will be recreated on the next decision.
+
+Verification: `npm test`, `npm run test:browser -- --grep hands-free`, `npm run build`, and `python -m pytest backend/tests -q`. Browser voice tests use speech/API doubles to exercise wake word, echo prevention, focus switch, actual webcam capture, closing and pause; real microphone recognition still depends on browser support and permission.
+
 ## Browser runtime assets
 
 `public/runtime/` contains a matched ort-web 1.30.0 distribution used by the pinned `@ultralytics/yolo` wrapper. Both the CPU and WebGPU paths need their matching `.mjs` / `.wasm` modules, including `ort-wasm-simd-threaded.asyncify.{mjs,wasm}`. Do not mix arbitrary npm ONNX Runtime versions with this wrapper's bridge. Restore all eight assets with `npm run runtime:sync` (requires network access). Vite serves them directly at `/runtime/` and excludes ONNX Runtime and the YOLO wrapper from dependency prebundling. Production builds copy the same directory to `dist/runtime/`.
