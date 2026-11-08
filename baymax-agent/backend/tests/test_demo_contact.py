@@ -89,3 +89,20 @@ def test_trial_template_is_explicit_and_errors_are_redacted(monkeypatch):
     result=demo_contact.failure_details(httpx.Response(400,json={'code':572006,'message':'private phone or token'}))
     assert result['error_code']==572006 and 'predefined' in result['message']
     assert 'private phone' not in str(result)
+
+
+def test_choking_requests_one_sms_immediately_without_user_response(monkeypatch):
+    configure(monkeypatch);calls=[]
+    def handler(request):
+        calls.append(request);assert request.method=='POST' and request.url.path.endswith('/Messages.json')
+        return httpx.Response(201,json={'sid':'SM'+'b'*32,'status':'queued'})
+    mock_provider(monkeypatch,handler)
+    with TestClient(app) as client:
+        identifier=str(uuid4());body={'id':identifier,'action':'POSSIBLE_CHOKING','held_ms':3200,'confidence':90}
+        client.post('/api/check-ins',json=body)
+        for _ in range(10):
+            reply=client.get('/api/check-ins/'+identifier).json()
+            if reply['status']=='CONTACT_ACCEPTED':break
+        assert reply['status']=='CONTACT_ACCEPTED' and len(calls)==1
+        client.post('/api/check-ins',json=body);assert len(calls)==1
+        assert identifier not in checkins.tasks

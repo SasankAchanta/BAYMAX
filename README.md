@@ -29,7 +29,8 @@ NVIDIA_API_KEY=your-key
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
 NVIDIA_VISION_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b
-ENABLE_CHATTERBOX=false
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=
 ```
 
 Restart FastAPI after configuration changes. Keys remain on the backend and `.env` is excluded from Git. The model IDs must be available to your NVIDIA account. Vision and model assets are local, so ordinary pose tracking still works without API keys; visual verification requires the remote model; local danger check-ins and the demonstration timer work without an API key.
@@ -107,7 +108,7 @@ Idle continuous Web Speech recognition listens for **Hey Baymax** or **Baymax**.
 
 Transcripts shorter than two words are ignored unless they are a recognized short answer immediately after a direct yes/no question. The backend repeats this check. Nemotron replies are prompted and bounded to **1–2 spoken sentences**, including the brief disclaimer when used. Speech-recognition permission/service errors are shown instead of repeatedly prompting. Chrome/Edge may require microphone permission or one Resume Voice click before automatic speech/listening can start. Browser speech services may process audio remotely; this is not an offline wake-word engine.
 
-`POST /api/voice-turn` receives the transcript, recent history and current vision context. Symptom-specific checkups may switch focus and capture a fresh frame for visual findings. Frames are not saved. Existing optional Chatterbox `/api/tts` support is parked with ENABLE_CHATTERBOX=false; browser speech remains the default. The local reference WAV and model cache are retained for later and excluded from Git.
+`POST /api/voice-turn` receives the transcript, recent history and current vision context. Symptom-specific checkups may switch focus and capture a fresh frame for visual findings. Frames are not saved. `POST /api/tts` uses ElevenLabs Flash v2.5 (`eleven_flash_v2_5`) and returns MP3 (`audio/mpeg`). Set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `baymax-agent/backend/.env`, then restart FastAPI. Missing configuration, provider failure, or busy generation returns a browser speech fallback signal. Recognition remains stopped during playback and resumes on completion. Both FastAPI entry points share the same TTS service; Chatterbox is no longer loaded. On Windows, if pip hits the long-path limit in this deeply nested project, install using `python -m pip install --no-deps --ignore-installed --prefix "\\?\C:\absolute\path\to\baymax-agent\.venv" elevenlabs` after the other requirements are available.
 
 ## Care Kit and decision log
 

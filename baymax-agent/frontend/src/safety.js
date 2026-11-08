@@ -1,4 +1,5 @@
 export const SAFETY_OPENINGS={
+ POSSIBLE_CHOKING:'I noticed your hands held near your neck. I am requesting help from your configured demo contact.',
  SITTING_HEAD_DOWN:'Your head has been down for a while. Are you feeling okay?',
  LIMPING:"I noticed you're limping. Did you hurt your leg or ankle?",
  HOPPING:"I noticed you're hopping on one foot. Did you hurt your foot or ankle?",
@@ -14,10 +15,10 @@ export const SAFETY_OPENINGS={
  REPEATED_LOUD_SOUNDS:'I heard several loud sounds. Are you okay?'
 };
 export function properResponse(text){return /\b(yes|no|yeah|nope|okay|ok|fine|safe|alright|help|hurt|pain|dizzy|dizziness|injur\w*|sick|breath\w*|bleed\w*|cough\w*|sneez\w*|nause\w*|stomach|chest|ankle|leg|arm|head|feel\w*)\b/i.test(text)}
-export function declinesContact(text){return /\b(don['’]?t|do not|never|no need to) (call|contact|text|message)\b|\b(no|not) (calls|messages)\b/i.test(text)}
+export function declinesContact(text){return /\b(don['’]?t|do not|never|no need to) (call|contact|text|message|send)\b|\b(no|not) (calls|messages)\b/i.test(text)}
 export function needsHelp(text,plainNo=true){
  const value=text.toLowerCase().trim();if(declinesContact(text))return false;if(/\b(don['’]?t|do not|no) (need|want) (any )?help\b/.test(value))return false;
- return /\b(need help|needs help|not (okay|ok|fine|safe)|can(not|['’]t) breathe|please help|help me|(call|contact) (my |the )?(authorities|authority|help( contact| number)?|demo (contact|number)|contact))\b/.test(value)||value==='help'||(plainNo&&['no','nope'].includes(value));
+ return /\b(need help|needs help|not (okay|ok|fine|safe)|can(not|['’]t) breathe|please help|help me|(?:call|contact) (?:my |the )?(authorities|authority|help( contact| number)?|demo (contact|number)|contact))\b/.test(value)||/^(?:baymax[, ]+)?(?:please )?send (?:me )?(?:a |the )?(?:text|sms)(?: message)?[.!]?$/.test(value)||value==='help'||(plainNo&&['no','nope'].includes(value));
 }
 export async function safetyRequest(path,body){
  let response;
@@ -31,21 +32,21 @@ export class SafetyCheck {
  emit(){if(!this.closed)this.onChange(this.incident?{...this.incident,remaining:Math.max(0,Math.ceil((this.incident.deadline-this.clock())/1000))}:null)}
  log(message){this.onLog({stage:'Safety check-in',message,time:new Date().toISOString()})}
  start(event){
-  if(this.closed||this.seen.has(event.id)||['AWAITING_RESPONSE','CONTACTING'].includes(this.incident?.status)||(event.action!=='USER_REQUESTED_HELP'&&this.clock()-(this.lastAction.get(event.action)??-Infinity)<60000))return false;
-  this.seen.add(event.id);this.lastAction.set(event.action,this.clock());const id=globalThis.crypto?.randomUUID?.()||`check-${this.clock()}-${Math.random().toString(36).slice(2)}`;
-  const incident={id,action:event.action,summary:event.summary||'',status:'AWAITING_RESPONSE',deadline:this.clock()+60000,logged:false};this.incident=incident;
-  this.log(`${event.action}: asking if you are okay. 60 seconds for a relevant response; escalation targets only the configured demo help number.`);
+  if(this.closed||this.seen.has(event.id)||this.incident?.contact?.delivery_pending||(this.incident?.status==='CONTACTING'||(this.incident?.status==='AWAITING_RESPONSE'&&event.action!=='POSSIBLE_CHOKING'))||(event.action!=='USER_REQUESTED_HELP'&&this.clock()-(this.lastAction.get(event.action)??-Infinity)<60000))return false;
+  this.seen.add(event.id);this.lastAction.set(event.action,this.clock());const id=globalThis.crypto?.randomUUID?.()||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const n=Math.floor(Math.random()*16);return (c==='x'?n:(n&3)|8).toString(16)});
+  const incident={id,action:event.action,confidence:event.confidence??null,held_ms:event.held_ms??0,immediate:event.action==='POSSIBLE_CHOKING',summary:event.summary||'',status:event.action==='POSSIBLE_CHOKING'?'CONTACTING':'AWAITING_RESPONSE',deadline:this.clock()+60000,logged:false};this.incident=incident;
+  this.log(incident.immediate?'Possible choking gesture held over 3 seconds: requesting the configured demo contact immediately.':`${event.action}: asking if you are okay. 60 seconds for a relevant response; escalation targets only the configured demo help number.`);
   this.emit();if(event.action!=='USER_REQUESTED_HELP')this.onPrompt(SAFETY_OPENINGS[event.action]||'I noticed unusual movement. Are you okay?');this.tick();
   this.registration=this.register(incident,event);
   return true;
  }
  async register(incident,event,attempt=0){
   try{
-   const reply=await this.request('',{id:incident.id,action:event.action,summary:incident.summary});
+   const reply=await this.request('',{id:incident.id,action:event.action,confidence:incident.confidence,held_ms:incident.held_ms,summary:incident.summary});
    if(this.closed||this.incident!==incident)return reply;
    incident.logged=true;incident.logError=false;incident.registrationError='';
    if(Number.isFinite(reply.deadline_ms))incident.deadline=Math.min(incident.deadline,reply.deadline_ms);
-   incident.mode=reply.mode||'simulation';incident.contact_config=reply.contact_config;this.emit();return reply;
+   incident.mode=reply.mode||'simulation';incident.contact_config=reply.contact_config;this.emit();if(incident.immediate)this.applyContact(reply,incident);return reply;
   }catch(error){
    if(this.closed||this.incident!==incident)return;
    incident.logError=true;incident.registrationError=error.message||'Safety API unavailable.';
@@ -54,6 +55,7 @@ export class SafetyCheck {
     await new Promise(resolve=>{this.registrationTimer=this.setTimer(resolve,1500*(attempt+1))});
     if(!this.closed&&this.incident===incident)return this.register(incident,event,attempt+1);
    }
+   if(incident.immediate){incident.status='CONTACT_UNCONFIRMED';incident.contact={message:'Backend unavailable; no demo SMS could be confirmed.'};this.emit();this.settle(incident);this.onEscalate(incident.contact.message,{final:true})}
   }
  }
  tick(){this.clearTimer(this.timer);if(this.closed||this.incident?.status!=='AWAITING_RESPONSE')return;if(this.clock()>=this.incident.deadline){this.expire();return}this.emit();this.timer=this.setTimer(()=>this.tick(),250)}
@@ -66,14 +68,14 @@ export class SafetyCheck {
   if(reply.status==='AWAITING_RESPONSE'){this.poll(incident);return}
   const changed=incident.status!==reply.status||incident.contact?.status!==reply.contact?.status;
   incident.status=reply.status;incident.contact=reply.contact;this.emit();
-  if(reply.status==='CONTACTING'){this.poll(incident);return}
+  if(reply.status==='CONTACTING'||reply.contact?.delivery_pending){this.poll(incident);return}
   this.settle(incident);
-  if(changed&&reply.contact?.message){this.log(reply.contact.message);this.onEscalate(reply.contact.message,{final:true})}
+  if(changed&&reply.contact?.message){this.log(reply.contact.message);this.onEscalate(reply.contact.speech_message||reply.contact.message,{final:true})}
  }
  poll(incident){
   this.clearTimer(this.pollTimer);if(this.closed||this.incident!==incident)return;
   if((incident.pollCount=(incident.pollCount||0)+1)>80){incident.status='CONTACT_UNCONFIRMED';this.settle(incident);incident.contact={message:'The demo contact request could not be confirmed. No automatic resend was made.'};this.emit();return}
-  this.pollTimer=this.setTimer(()=>{Promise.resolve(this.registration).then(()=>this.request('/'+incident.id)).then(reply=>this.applyContact(reply,incident)).catch(()=>{if(this.incident===incident){incident.status='CONTACT_UNCONFIRMED';this.settle(incident);incident.contact={message:'Backend unavailable; no demo call or message could be confirmed.'};this.log(incident.contact.message);this.emit();this.onEscalate(incident.contact.message,{final:true})}})},1000);
+  this.pollTimer=this.setTimer(()=>{Promise.resolve(this.registration).then(()=>this.request('/'+incident.id)).then(reply=>this.applyContact(reply,incident)).catch(()=>{if(this.incident===incident){if((incident.pollErrors=(incident.pollErrors||0)+1)<3){this.poll(incident);return}incident.status='CONTACT_UNCONFIRMED';this.settle(incident);incident.contact={message:'Backend unavailable; no demo call or message could be confirmed.'};this.log(incident.contact.message);this.emit();this.onEscalate(incident.contact.message,{final:true})}})},1000);
  }
  expire(){
   if(this.closed||this.incident?.status!=='AWAITING_RESPONSE')return;
@@ -86,7 +88,7 @@ export class SafetyCheck {
  respond(text){
   const help=needsHelp(text,this.incident?.status==='AWAITING_RESPONSE'&&!['LIMPING','HOPPING','GUARDING_ARM'].includes(this.incident?.action));
   if(help&&(!this.incident||this.incident.status==='RESPONDED'))this.start({id:'spoken-help-'+this.clock(),action:'USER_REQUESTED_HELP',summary:'User explicitly requested help.'});
-  if(help&&this.incident?.status?.startsWith('CONTACT')){this.onEscalate(this.incident.contact?.message||'Your demo contact request is already being processed.');return true}
+  if(help&&this.incident?.status?.startsWith('CONTACT')){this.onEscalate(this.incident.contact?.speech_message||this.incident.contact?.message||'Your demo contact request is already being processed.');return true}
   if(this.incident?.status!=='AWAITING_RESPONSE'||(!help&&!properResponse(text)&&!declinesContact(text)))return false;
   if(this.clock()>=this.incident.deadline){this.expire();return false}
   const incident=this.incident;incident.status=help?'CONTACTING':'RESPONDED';incident.response=text;this.clearTimer(this.timer);this.emit();if(!help)this.settle(incident);

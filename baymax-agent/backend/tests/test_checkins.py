@@ -35,7 +35,7 @@ def test_no_response_at_exact_deadline_logs_only_simulated_escalation(monkeypatc
 def test_backend_timer_itself_waits_sixty_seconds_and_expires(monkeypatch):
     import asyncio
     clock=[3000.0];monkeypatch.setattr(checkins.time,'time',lambda:clock[0]);identifier=str(uuid4());delays=[]
-    checkins.incidents[identifier]={'status':'AWAITING_RESPONSE','deadline_ms':3060000,'summary':'Repeated sound spikes'}
+    checkins.incidents[identifier]={'id':identifier,'action':'REPEATED_LOUD_SOUNDS','status':'AWAITING_RESPONSE','deadline_ms':3060000,'summary':'Repeated sound spikes'}
     async def advance(delay):
         delays.append(delay);clock[0]+=delay
     monkeypatch.setattr(checkins.asyncio,'sleep',advance)
@@ -43,3 +43,14 @@ def test_backend_timer_itself_waits_sixty_seconds_and_expires(monkeypatch):
     assert delays==[60.0]
     assert checkins.incidents[identifier]['status']=='ESCALATED_DEMO'
     assert 'demo_escalation' in decision_log.LOG_PATH.read_text(encoding='utf-8')
+
+
+def test_choking_over_three_seconds_escalates_immediately_and_supersedes_old_timer():
+    with TestClient(app) as client:
+        old=str(uuid4());client.post('/api/check-ins',json={'id':old,'action':'HOLDING_CHEST'})
+        identifier=str(uuid4())
+        for held in [0,2999,3000]:assert client.post('/api/check-ins',json={'id':identifier,'action':'POSSIBLE_CHOKING','held_ms':held}).status_code==422
+        reply=client.post('/api/check-ins',json={'id':identifier,'action':'POSSIBLE_CHOKING','held_ms':3100}).json()
+        assert reply['status']=='ESCALATED_DEMO'
+        assert checkins.incidents[old]['status']=='SUPERSEDED' and old not in checkins.tasks
+        assert identifier not in checkins.tasks

@@ -1,62 +1,54 @@
-import io
-import wave
-from types import SimpleNamespace, ModuleType
+from types import SimpleNamespace
 from unittest.mock import Mock
-from contextlib import nullcontext
 from fastapi.testclient import TestClient
 from backend.voice_api import app
 from backend import tts
 
-
-def wav_bytes():
-    output=io.BytesIO()
-    with wave.open(output,'wb') as audio:
-        audio.setnchannels(1);audio.setsampwidth(2);audio.setframerate(24000);audio.writeframes(b'\x00\x00'*240)
-    return output.getvalue()
-
-
-def test_audio_endpoint_returns_wav_and_rejects_unbounded_text(monkeypatch):
-    generate=Mock(return_value=wav_bytes())
-    monkeypatch.setattr(tts.service,'generate',generate)
-    client=TestClient(app)
-    response=client.post('/api/tts',json={'text':'Hello, I am Baymax.'})
-    assert response.status_code==200
-    assert response.headers['content-type']=='audio/wav'
-    assert response.content[:4]==b'RIFF'
-    assert response.headers['cache-control']=='no-store'
-    for text in ('',' ','x'*501):
-        assert client.post('/api/tts',json={'text':text}).status_code==422
+def test_audio_endpoint_returns_mp3_and_rejects_unbounded_text(monkeypatch):
+    generate=Mock(return_value=b'ID3test-audio');monkeypatch.setattr(tts.service,'generate',generate)
+    client=TestClient(app);response=client.post('/api/tts',json={'text':'Hello, I am Baymax.'})
+    assert response.status_code==200 and response.headers['content-type']=='audio/mpeg'
+    assert response.content==b'ID3test-audio' and response.headers['cache-control']=='no-store'
+    for text in ('',' ','x'*501):assert client.post('/api/tts',json={'text':text}).status_code==422
     generate.assert_called_once_with('Hello, I am Baymax.')
-
 
 def test_unavailable_or_busy_returns_browser_fallback(monkeypatch):
     monkeypatch.setattr(tts.service,'generate',lambda text:None)
-    response=TestClient(app).post('/api/tts',json={'text':'Hello'})
-    assert response.status_code==200
-    assert response.json()['fallback']=='browser'
+    assert TestClient(app).post('/api/tts',json={'text':'Hello'}).json()['fallback']=='browser'
 
-
-def test_startup_loads_once_and_selects_device(monkeypatch,tmp_path):
-    monkeypatch.setenv('ENABLE_CHATTERBOX','true')
-    reference=tmp_path/'reference.wav';reference.write_bytes(wav_bytes())
-    monkeypatch.setenv('TTS_REFERENCE_PATH',str(reference))
-    fake=Mock(return_value=SimpleNamespace(sr=24000))
-    import sys
-    monkeypatch.setitem(sys.modules,'torch',SimpleNamespace(cuda=SimpleNamespace(is_available=lambda:True)))
-    monkeypatch.setitem(sys.modules,'chatterbox',ModuleType('chatterbox'))
-    monkeypatch.setitem(sys.modules,'chatterbox.tts_turbo',SimpleNamespace(ChatterboxTurboTTS=SimpleNamespace(from_pretrained=fake)))
+def test_startup_initializes_once_and_conversion_uses_requested_settings(monkeypatch):
+    monkeypatch.setenv('ELEVENLABS_API_KEY','test-only-secret');monkeypatch.setenv('ELEVENLABS_VOICE_ID','test-voice')
+    convert=Mock(return_value=iter([b'ID3',b'audio']));factory=Mock(return_value=SimpleNamespace(text_to_speech=SimpleNamespace(convert=convert)))
+    monkeypatch.setattr(tts,'ElevenLabs',factory)
     service=tts.TTSService();service.load();service.load()
-    fake.assert_called_once_with(device='cuda')
-    assert service.status=='ready' and service.reference==reference
+    factory.assert_called_once_with(api_key='test-only-secret',timeout=5)
+    assert service.generate('Hello')==b'ID3audio'
+    assert convert.call_args.kwargs=={'voice_id':'test-voice','text':'Hello','model_id':'eleven_flash_v2_5','output_format':'mp3_44100_128','request_options':{'max_retries':0,'timeout_in_seconds':5}}
 
-
-def test_generation_error_and_lock_do_not_break_voice(monkeypatch):
-    import sys
-    monkeypatch.setitem(sys.modules,'torch',SimpleNamespace(inference_mode=nullcontext))
-    monkeypatch.setitem(sys.modules,'torchaudio',SimpleNamespace())
-    service=tts.TTSService();service.status='ready';service.model=SimpleNamespace(generate=Mock(side_effect=RuntimeError('failed')))
-    assert service.generate('hello') is None
-    assert not service.inference_lock.locked()
+def test_api_failure_empty_audio_and_busy_lock_fall_back(monkeypatch):
+    service=tts.TTSService();service.status='ready';convert=Mock(side_effect=RuntimeError('secret provider message'))
+    service.client=SimpleNamespace(text_to_speech=SimpleNamespace(convert=convert));service.voice_id='test-voice'
+    assert service.generate('Hello') is None and not service.inference_lock.locked()
+    convert.side_effect=None;convert.return_value=iter([]);assert service.generate('Hello') is None
     service.inference_lock.acquire()
-    try: assert service.generate('hello') is None
-    finally: service.inference_lock.release()
+    try:assert service.generate('Hello') is None
+    finally:service.inference_lock.release()
+
+def test_missing_configuration_never_initializes_sdk(monkeypatch):
+    factory=Mock();monkeypatch.setattr(tts,'ElevenLabs',factory)
+    monkeypatch.delenv('ELEVENLABS_API_KEY',raising=False);service=tts.TTSService();service.load();assert service.status=='disabled'
+    monkeypatch.setenv('ELEVENLABS_API_KEY','test');monkeypatch.delenv('ELEVENLABS_VOICE_ID',raising=False);service=tts.TTSService();service.load();assert service.status=='not_configured'
+    factory.assert_not_called()
+
+
+def test_real_sdk_contract_consumes_mp3_iterator_without_network():
+    import httpx,json
+    from elevenlabs.client import ElevenLabs
+    def handler(request):
+        assert request.url.path.endswith('/text-to-speech/test-voice')
+        assert request.url.params['output_format']=='mp3_44100_128'
+        body=json.loads(request.content);assert body['model_id']=='eleven_flash_v2_5' and body['text']=='Hello'
+        return httpx.Response(200,content=b'ID3sample',headers={'Content-Type':'audio/mpeg'})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        service=tts.TTSService();service.client=ElevenLabs(api_key='test-only',httpx_client=transport,timeout=5);service.voice_id='test-voice';service.status='ready'
+        assert service.generate('Hello')==b'ID3sample'

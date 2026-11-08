@@ -76,3 +76,27 @@ test('early candidate labels do not bypass the Stage 1 issue threshold',()=>{
  for(let n=0;n<=2100;n+=100){r=step(t,n);assert.equal(gate.update(r,n),null)}
  r=step(t,2200);assert.equal(gate.update(r,2200).action,'HOLDING_CHEST');
 });
+
+
+test('degenerate shoulders and invisible wrists cannot produce chest-hold triggers',()=>{
+ for(const missing of ['collapsed','wrists']){
+  const t=new BehaviorTracker();let r;
+  for(let now=0;now<=5000;now+=100){const p=pose();if(missing==='collapsed')p.points[6]=[76,100,.99];else{p.points[9][2]=0;p.points[10][2]=0}r=step(t,now,p)}
+  assert.equal(r.triggerDurations.HOLDING_CHEST,undefined);assert.ok(r.framingHint.length>0);
+ }
+});
+
+
+test('neck holding is upper-body only, requires strictly over 3s, and cannot trigger chest early',()=>{
+ for(const mode of ['upper','body']){
+  const t=new BehaviorTracker();let r;
+  for(let now=0;now<=3100;now+=100){const p=pose({wrist:'none'});p.points[9]=[100,90,.95];r=step(t,now,p,mode);assert.equal(r.triggerDurations.HOLDING_CHEST,undefined);if(now<=3100)assert.equal(r.triggerDurations.POSSIBLE_CHOKING,undefined)}
+  const p=pose({wrist:'none'});p.points[9]=[100,90,.95];r=step(t,3200,p,mode);
+  assert.equal(Boolean(r.triggerDurations.POSSIBLE_CHOKING),mode==='upper');
+ }
+});
+test('neck hold resets on withdrawal or invisible wrists',()=>{
+ const t=new BehaviorTracker();let r;
+ for(let now=0;now<=5000;now+=100){const p=pose({wrist:'none'});if(now<2000||now>2100)p.points[9]=[100,90,.95];r=step(t,now,p)}
+ assert.equal(r.triggerDurations.POSSIBLE_CHOKING,undefined);
+});

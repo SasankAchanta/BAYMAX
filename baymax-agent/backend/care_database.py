@@ -14,6 +14,7 @@ from .care import CATALOG
 from . import shopping
 
 _seed_lock=asyncio.Lock()
+_save_lock=asyncio.Lock()
 _refresh_lock=asyncio.Lock()
 _refresh_status={'running':False,'updated':0,'failed':0,'message':''}
 async def ensure_seed():
@@ -32,11 +33,18 @@ async def save_recommendations(kit,reason):
         kit['database_sync']={'saved':False,'message':'SpacetimeDB is not configured.'};return
     try:
         count=0
-        for item in kit['items']:
-            key=item['id']
-            if key not in CATALOG:continue
-            await store.upsert(starter(key))
-            await store.recommend(key,reason.strip()[:1500] or 'Recommended by Baymax during your checkup.');count+=1
+        async with _save_lock:
+            existing={row['id']:row for row in await store.list()}
+            for item in kit['items']:
+                key=item['id']
+                if key not in CATALOG:continue
+                if key not in existing:
+                    await store.upsert(starter(key));existing[key]=starter(key)
+                reason_text=reason.strip()[:1500] or 'Recommended by Baymax during your checkup.'
+                if not existing[key].get('recommended') or existing[key].get('reason')!=reason_text:
+                    await store.recommend(key,reason_text)
+                    existing[key].update(recommended=True,reason=reason_text)
+                count+=1
         kit['database_sync']={'saved':True,'count':count}
     except DatabaseUnavailable:kit['database_sync']={'saved':False,'message':'Recommendation could not be saved to SpacetimeDB. Check the local database server.'}
 
@@ -47,6 +55,7 @@ async def _refresh_offers(keys=None,force=False):
         rows=await store.list();updated=failed=0
         for row in rows:
             if keys is not None and row['id'] not in keys:continue
+            if not force and row.get('price_status')=='manual_entry':continue
             if not force and row.get('price_checked_at') and row['price_status']=='live_quote':
                 try:
                     if (datetime.now(timezone.utc)-datetime.fromisoformat(row['price_checked_at'])).total_seconds()<86400:continue

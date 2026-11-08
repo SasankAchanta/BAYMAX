@@ -29,3 +29,8 @@ baymax-agent/frontend/tests/fixtures/always-on-*.png
 .spacetime/
 baymax-agent/spacetimedb/.spacetime/
 baymax-agent/frontend/tests/fixtures/database-*.png
+
+baymax_decisions.sqlite3*
+baymax-agent/.test-tmp*/
+baymax-agent/frontend/tests/fixtures/flat-*.png
+baymax-agent/frontend/tests/fixtures/streamlined-*.png

@@ -32,8 +32,8 @@ test('permission denial stops retry loop, unsupported browsers remain idle',()=>
  const {loop,finish,recognitions}=setup();loop.enable();loop.start();finish();recognitions[0].onerror({error:'not-allowed'});assert.equal(loop.state,'IDLE');assert.equal(loop.active,false);assert.match(loop.message,/permission denied/);loop.destroy();
  const unsupported=new VoiceLoop({host:{}});unsupported.enable();assert.equal(unsupported.enabled,false);assert.equal(unsupported.state,'IDLE');
 });
-test('backend failures end safely; detector danger can be a secondary scored action',async()=>{
- const {loop,finish}=setup(async()=>{throw new Error('Backend unavailable')});loop.enable();loop.start();finish();await loop.turn('I feel dizzy');assert.equal(loop.state,'IDLE');assert.equal(loop.message,'Backend unavailable');loop.destroy();
+test('backend failures recover into listening; detector danger can be a secondary scored action',async()=>{
+ const {loop,finish}=setup(async()=>{throw new Error('Backend unavailable')});loop.enable();loop.start();finish();await loop.turn('I feel dizzy');assert.equal(loop.state,'SPEAKING');finish();assert.equal(loop.state,'LISTENING');loop.destroy();
  assert.equal(dangerState({scores:[{label:'SITTING',score:90},{label:'SITTING_HEAD_DOWN',score:70}]}),true);assert.equal(dangerState({scores:[{label:'SITTING_HEAD_DOWN',score:0}]}),false);
 });
 
@@ -53,12 +53,12 @@ test('visual request captures once and resubmits same turn with focused frame',a
 });
 
 
-test('cloned WAV playback gates microphone until audio.onended and releases URL',async()=>{
+test('MP3 playback gates microphone until audio.onended and releases URL',async()=>{
  const audios=[],revoked=[],recognizers=[];
  class Recognition{constructor(){recognizers.push(this)}start(){}abort(){this.aborted=true}}
  class Audio{constructor(url){this.url=url;audios.push(this)}play(){return Promise.resolve()}pause(){this.paused=true}removeAttribute(){}load(){}}
  const host={Audio,SpeechRecognition:Recognition,SpeechSynthesisUtterance:class{},speechSynthesis:{speaking:false,cancel(){},speak(){throw new Error('Unexpected browser fallback')}},URL:{createObjectURL:()=> 'blob:voice',revokeObjectURL:url=>revoked.push(url)}};
- const loop=new VoiceLoop({host,requestAudio:async()=>new Blob(['wav'],{type:'audio/wav'})});
+ const loop=new VoiceLoop({host,requestAudio:async()=>new Blob(['mp3'],{type:'audio/mpeg'})});
  loop.enable();loop.start();await new Promise(r=>setImmediate(r));
  assert.equal(loop.state,'SPEAKING');assert.equal(recognizers.length,0);assert.equal(audios.length,1);
  audios[0].onended();assert.equal(loop.state,'LISTENING');assert.equal(recognizers.length,1);assert.deepEqual(revoked,['blob:voice']);
@@ -94,4 +94,27 @@ test('a local safety prompt interrupts an active conversation and listens after 
  assert.equal(x.loop.safetyCheckIn('I noticed you holding your chest. Are you okay?'),true);
  assert.equal(x.spoken.length,2);assert.equal(x.recognitions.length,0);x.finish();assert.equal(x.loop.state,'LISTENING');
  let reply;x.loop.onTranscript=t=>reply=t;x.loop.requestTurn=async()=>({text:'Glad you are okay.',end_conversation:true});x.loop.acceptTranscript('yes');assert.equal(reply,'yes');x.loop.destroy();
+});
+
+
+test('push-to-talk interrupts an in-flight model turn and ignores its stale reply',async()=>{
+ let resolve,signal;const x=setup((_,s)=>{signal=s;return new Promise(r=>resolve=r)});
+ x.loop.enable();x.loop.start();x.finish();const turn=x.loop.turn('My arm hurts');
+ x.loop.startPushToTalk();assert.equal(signal.aborted,true);assert.equal(x.loop.state,'LISTENING');
+ resolve({text:'Stale reply',end_conversation:false});await turn;assert.equal(x.spoken.length,1);x.loop.destroy();
+});
+
+
+test('camera capture failure falls back to a verbal checkup without ending the conversation',async()=>{
+ const bodies=[];const x=setup(async body=>{bodies.push(body);return body.inspection_unavailable?{text:'Please describe your arm.',end_conversation:false}:{text:'Inspecting',end_conversation:false,inspection_request:{mode:'arms'}}});
+ x.loop.inspect=async()=>{throw new Error('Camera unavailable')};x.loop.enable();x.loop.start();x.finish();await x.loop.turn('My arm hurts');
+ assert.equal(bodies.length,2);assert.equal(bodies[1].inspection_unavailable,true);assert.equal(x.loop.active,true);x.finish();assert.equal(x.loop.state,'LISTENING');x.loop.destroy();
+});
+
+
+test('MP3 responses are accepted and non-audio fallback signals are ignored',async()=>{
+ const loop=new VoiceLoop({host:{fetch:async()=>({ok:true,headers:{get:()=> 'audio/mpeg'},blob:async()=>new Blob(['ID3mp3'],{type:'audio/mpeg'})})}});
+ assert.equal((await loop.fetchAudio('Hello')).type,'audio/mpeg');
+ loop.host.fetch=async()=>({ok:true,headers:{get:()=> 'application/json'}});
+ assert.equal(await loop.fetchAudio('Hello'),null);
 });

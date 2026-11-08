@@ -3,7 +3,7 @@ const visible=(p,c=.3)=>p&&Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[2]>c;
 const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
 const distance=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
 const angle=(a,b,c)=>{const u=[a[0]-b[0],a[1]-b[1]],v=[c[0]-b[0],c[1]-b[1]];return Math.acos(Math.max(-1,Math.min(1,(u[0]*v[0]+u[1]*v[1])/(Math.hypot(...u)*Math.hypot(...v)||1))))*180/Math.PI};
-export const UPPER_ACTIONS=['CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING','SUDDEN_FALL'];
+export const UPPER_ACTIONS=['POSSIBLE_CHOKING','CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING','SUDDEN_FALL'];
 // Image-space samples retain camera motion; all distances/velocities use the earlier sample's torso scale.
 export class BehaviorTracker {
  constructor(){this.reset()}
@@ -17,7 +17,7 @@ export class BehaviorTracker {
   const dt=this.last===null?0:Math.max(0,(now-this.last)/1000);this.last=now;
   if(this.mode!==mode){this.holds={};this.events=[];this.spikeActive=false;this.faceEpisode=null;for(const key of Object.keys(this.latches))if(key!=='SUDDEN_FALL')delete this.latches[key];this.mode=mode}
   this.history=this.history.filter(s=>now-s.now<=3000);this.events=this.events.filter(t=>now-t<=3000);
-  const shoulderOK=person&&[5,6].every(i=>visible(p?.[i]));
+  const shoulderOK=person&&[5,6].every(i=>visible(p?.[i]))&&distance(p[5],p[6])>Math.max(4,(frameHeight||400)*.025);
   const noseOK=shoulderOK&&visible(p[0]);
   const shoulder=shoulderOK?mid(p[5],p[6]):null;
   const hips=shoulderOK&&[11,12].every(i=>visible(p[i]))?mid(p[11],p[12]):null;
@@ -48,6 +48,12 @@ export class BehaviorTracker {
    const old=this.history.filter(s=>now-s.now>0&&now-s.now<=1200).at(-1);
    const speed=i=>visible(p[i])&&old&&visible(old.points[i])?distance(p[i],old.points[i])/old.scale/((now-old.now)/1000):Infinity;
    if(mode==='upper'){
+    const neck=[shoulder[0],noseOK?shoulder[1]+(p[0][1]-shoulder[1])*.35:shoulder[1]-.15*scale];
+    const neckHands=[9,10].filter(i=>visible(p[i])&&(!noseOK||p[i][1]>p[0][1]+.15*scale)&&p[i][1]<shoulder[1]+.08*scale&&distance(p[i],neck)/scale<.28&&speed(i)<.25);
+    if(neckHands.length){
+     this.holds.neck??=now;const held=now-this.holds.neck;
+     if(held>0){const q=Math.min(quality,...neckHands.map(i=>p[i][2]*100));scores.POSSIBLE_CHOKING=q;candidates.push({label:'POSSIBLE_CHOKING',score:q,held_ms:held,required_ms:3000,issue:held>3000});if(held>3000)triggers.POSSIBLE_CHOKING=held;summary='Hand held near the neck: possible choking gesture; pose alone cannot confirm choking.'}
+    }else delete this.holds.neck;
     const chest=[shoulder[0],shoulder[1]+.25*scale],abdomen=[shoulder[0],shoulder[1]+.75*scale];
     for(const [label,target] of [['HOLDING_CHEST',chest],['CLENCHING_STOMACH',abdomen]]){
      let held=0;
@@ -55,7 +61,7 @@ export class BehaviorTracker {
       const key=label+w;
       const hunch=(noseOK&&(p[0][1]-shoulder[1])/scale<.35)||([s,e,w].every(i=>visible(p[i]))&&angle(p[s],p[e],p[w])<95);
       const other=label==='HOLDING_CHEST'?abdomen:chest;
-      const active=visible(p[w])&&distance(p[w],target)<=distance(p[w],other)&&distance(p[w],target)/scale<.35&&speed(w)<.15&&hunch;
+      const active=!neckHands.includes(w)&&visible(p[w])&&distance(p[w],target)<=distance(p[w],other)&&distance(p[w],target)/scale<.35&&speed(w)<.15&&hunch;
       if(active){this.holds[key]??=now;held=Math.max(held,now-this.holds[key])}else delete this.holds[key];
      }
      if(held>0){const q=Math.min(quality,...[9,10].filter(i=>visible(p[i])&&distance(p[i],target)/scale<.35).map(i=>p[i][2]*100));scores[label]=q;candidates.push({label,score:q,held_ms:held,required_ms:2000,issue:held>2000});if(held>2000)triggers[label]=held;summary=label==='HOLDING_CHEST'?'Hand held near the chest with low movement and a hunched/bent-arm posture.':'Hand held near the abdomen with low movement and a hunched/bent-arm posture.'}
@@ -103,6 +109,9 @@ export class BehaviorTracker {
   const triggered=candidates.map(c=>c.label);if(this.lyingTimer>=15)triggered.push('LYING_DOWN');
   if(mode==='upper'&&candidates.length)scores.UPPER_BODY_NEUTRAL=0;
   if(triggered.length)for(const label of Object.keys(scores))if(!triggered.includes(label))scores[label]*=.45;
-  return {...base,person,points:p,scores:Object.entries(scores).map(([label,score])=>({label,score:Math.round(score||0)})).sort((a,b)=>b.score-a.score),summary,lyingSeconds:this.lyingTimer,review:this.lyingTimer>=15,triggerDurations:triggers,behaviorCandidates:candidates.sort((a,b)=>b.held_ms-a.held_ms),temporal:{...base.temporal,drop_velocity:this.drop?.velocity||0,horizontal_ms:this.lyingTimer*1000},normalization:{scale,torsoAngle,lyingProbability:probability}};
+  const required=mode==='upper'?[0,5,6]:[0,5,6,11,12,15,16];
+  const visibility=required.filter(i=>visible(p?.[i])).length/required.length;
+  const framingHint=!shoulderOK?'Move back until both shoulders are clearly visible.':mode==='body'&&[11,12,15,16].some(i=>!visible(p?.[i]))?'Step back so your hips and both feet fit in the frame.':mode==='upper'&&![9,10].some(i=>visible(p?.[i]))?'Keep your head, shoulders and at least one wrist in view.':visibility<1?'Improve lighting and face the camera so key joints stay visible.':'Camera framing looks usable.';
+  return {...base,framingHint,visibility,person,points:p,scores:Object.entries(scores).map(([label,score])=>({label,score:Math.round(score||0)})).sort((a,b)=>b.score-a.score),summary,lyingSeconds:this.lyingTimer,review:this.lyingTimer>=15,triggerDurations:triggers,behaviorCandidates:candidates.sort((a,b)=>b.held_ms-a.held_ms),temporal:{...base.temporal,drop_velocity:this.drop?.velocity||0,horizontal_ms:this.lyingTimer*1000},normalization:{scale,torsoAngle,lyingProbability:probability}};
  }
 }

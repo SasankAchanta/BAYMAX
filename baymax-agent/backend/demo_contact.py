@@ -17,7 +17,7 @@ def configuration():
 
 def unavailable():
     config=configuration()
-    return {'mode':'simulation' if not config['enabled'] else config['mode'],'status':'simulated' if not config['enabled'] else 'not_configured','message':'Demo escalation only; no call or message placed.' if not config['enabled'] else 'Demo help contact could not be reached: configure the Twilio credentials and phone numbers in backend/.env.','authorities_contacted':False}
+    return {'mode':'simulation' if not config['enabled'] else config['mode'],'status':'simulated' if not config['enabled'] else 'not_configured','message':'Demo escalation only; no call or message placed.' if not config['enabled'] else 'Demo help contact could not be reached: configure the Twilio credentials and phone numbers in backend/.env.','speech_message':'This is a demo alert. No help message was sent.' if not config['enabled'] else 'I could not send your help request. The help contact is not configured.','authorities_contacted':False}
 
 ERROR_HINTS={
  572002:'This trial sender is not assigned to this recipient. Copy the From number from Twilio Try out SMS for that recipient.',
@@ -40,7 +40,7 @@ def failure_details(response):
         if isinstance(code,bool) or not isinstance(code,int):code=None
     except (ValueError,AttributeError):code=None
     hint=ERROR_HINTS.get(code,'Check the Twilio sender, verified recipient and account messaging settings.')
-    return {'http_status':response.status_code,'error_code':code,'error_url':f'https://www.twilio.com/docs/api/errors/{code}' if code else None,'message':f'Twilio rejected the demo contact request (HTTP {response.status_code}'+(f', code {code}' if code else '')+'). '+hint}
+    return {'speech_message':'I could not send your help request. There is a problem with the messaging service.','http_status':response.status_code,'error_code':code,'error_url':f'https://www.twilio.com/docs/api/errors/{code}' if code else None,'message':f'Twilio rejected the demo contact request (HTTP {response.status_code}'+(f', code {code}' if code else '')+'). '+hint}
 
 async def notify(action,reason):
     config=configuration()
@@ -61,10 +61,25 @@ async def notify(action,reason):
             if not re.fullmatch(r'(SM|MM|CA)[a-fA-F0-9]{32}',identifier):raise ValueError()
             status=result.get('status','queued')
             if status in ('failed','undelivered','canceled','busy','no-answer'):
-                return {**base,'status':'failed','provider_status':status,'message':'Twilio could not complete the demo contact request.'}
+                return {**base,'status':'failed','speech_message':'Your help request could not be completed.','provider_status':status,'message':'Twilio could not complete the demo contact request.'}
             notice=' Trial template only: custom BAYMAX alert details are not included.' if base['template_only'] else ''
-            return {**base,'status':'accepted','provider_status':str(status)[:40],'sid':identifier,'message':f'Twilio accepted the {config["mode"]} request for your demo help contact; delivery or answer is not yet confirmed.'+notice}
+            return {**base,'status':'accepted','speech_message':'Your help message has been submitted. Delivery is not yet confirmed.' if config['mode']=='sms' else 'Your help call has been requested. An answer is not yet confirmed.','provider_status':str(status)[:40],'sid':identifier,'message':f'Twilio accepted the {config["mode"]} request for your demo help contact; delivery or answer is not yet confirmed.'+notice}
     except httpx.TimeoutException:
-        return {**base,'status':'unknown','message':'Twilio did not confirm before timeout. The request may have reached Twilio; no automatic retry was made.'}
+        return {**base,'status':'unknown','speech_message':'I could not confirm your help request. I have not sent it again.','message':'Twilio did not confirm before timeout. The request may have reached Twilio; no automatic retry was made.'}
     except (httpx.HTTPError,ValueError,TypeError,AttributeError):
-        return {**base,'status':'unknown','message':'The demo contact request could not be confirmed. No automatic retry was made.'}
+        return {**base,'status':'unknown','speech_message':'I could not confirm your help request. I have not sent it again.','message':'The demo contact request could not be confirmed. No automatic retry was made.'}
+
+
+async def delivery(identifier):
+    """Read-only delivery lookup. Never retries an outbound send."""
+    if not re.fullmatch(r'(SM|MM)[a-fA-F0-9]{32}',identifier):return None
+    sid=os.getenv('TWILIO_ACCOUNT_SID','').strip();token=os.getenv('TWILIO_AUTH_TOKEN','').strip()
+    try:
+        async with httpx.AsyncClient(timeout=8,follow_redirects=False) as client:
+            response=await client.get(f'https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages/{identifier}.json',auth=(sid,token))
+            if not response.is_success:return None
+            result=response.json();state=result.get('status')
+            if state not in ('accepted','scheduled','queued','sending','sent','delivered','read','failed','undelivered','canceled'):return None
+            code=result.get('error_code')
+            return {'provider_status':state,'error_code':code if type(code) is int else None}
+    except (httpx.HTTPError,ValueError,AttributeError):return None

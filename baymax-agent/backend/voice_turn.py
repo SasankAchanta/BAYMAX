@@ -46,6 +46,7 @@ class VoiceTurn(BaseModel):
     transcript: str = Field(min_length=1, max_length=2000)
     vision: VisionContext = Field(default_factory=VisionContext)
     inspection: Inspection | None = None
+    inspection_unavailable: bool = False
     history: list[TurnMessage] = Field(default_factory=list, max_length=12)
 
 
@@ -102,17 +103,17 @@ async def voice_turn(turn: VoiceTurn,background_tasks: BackgroundTasks):
         raise HTTPException(503, 'Set NVIDIA_API_KEY in backend/.env to enable voice conversations.')
     default_items, practical_guidance = care_plan(turn.transcript)
     requested_mode = inspection_mode(turn.transcript)
-    if requested_mode and turn.inspection is None:
+    if requested_mode and turn.inspection is None and not turn.inspection_unavailable:
         kit = care_payload(default_items) if default_items else None
         if kit:
-            log_decision('care_kit', turn.transcript, turn.vision.summary, [i['name'] for i in kit['items']], practical_guidance)
+            log_decision('care_kit', turn.transcript, turn.vision.summary, [i['name'] for i in kit['items']], practical_guidance,action=turn.vision.action,confidence=turn.vision.confidence,status='recommended')
         if kit:
             await save_recommendations(kit,practical_guidance or turn.transcript)
             if shopping.configured():background_tasks.add_task(refresh_offers,[i['id'] for i in kit['items']])
         return {'care_kit': kit, 'text': 'Let me take a look so I can ask a better follow-up question.', 'end_conversation': False, 'inspection_request': {'mode': requested_mode}}
     client = AsyncOpenAI(api_key=os.environ['NVIDIA_API_KEY'], base_url=os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1'), timeout=25, max_retries=0)
     try:
-        findings = turn.vision.summary
+        findings = 'Camera inspection unavailable; do not claim to see the user. Ask for a verbal description.' if turn.inspection_unavailable else turn.vision.summary
         if turn.inspection:
             try:
                 findings = await inspect_image(client, turn.inspection)
@@ -155,10 +156,10 @@ async def voice_turn(turn: VoiceTurn,background_tasks: BackgroundTasks):
         if not answer:
             raise HTTPException(502, 'Nemotron returned an empty voice response.')
         if kit and kit['items']:
-            log_decision('care_kit', ' | '.join([m.content for m in turn.history if m.role == 'user'] + [turn.transcript]), findings, [i['name'] for i in kit['items']], parsed.decision.next_steps if parsed.decision else practical_guidance)
+            log_decision('care_kit', ' | '.join([m.content for m in turn.history if m.role == 'user'] + [turn.transcript]), findings, [i['name'] for i in kit['items']], parsed.decision.next_steps if parsed.decision else practical_guidance,action=turn.vision.action,confidence=turn.vision.confidence,status='recommended')
         if parsed.decision and parsed.decision.kind != 'care_kit':
             try:
-                log_decision(parsed.decision.kind, ' | '.join([m.content for m in turn.history if m.role == 'user'] + [turn.transcript]), findings, parsed.decision.items, parsed.decision.next_steps)
+                log_decision(parsed.decision.kind, ' | '.join([m.content for m in turn.history if m.role == 'user'] + [turn.transcript]), findings, parsed.decision.items, parsed.decision.next_steps,action=turn.vision.action,confidence=turn.vision.confidence,status=parsed.decision.kind)
             except OSError:
                 raise HTTPException(500, 'Decision could not be logged. Check baymax_decisions.txt file permissions.')
         if kit:

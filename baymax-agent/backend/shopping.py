@@ -24,6 +24,7 @@ def matches(key,title,custom_name=None):
         return bool(words) and all(word in text for word in words)
     terms={'acetaminophen':('acetaminophen','tylenol'),'ibuprofen':('ibuprofen','advil'),'nyquil':('nyquil',),'foot cast':('walking boot','cast boot','fracture boot'),'bandages':('bandage','band-aid'),'saline':('saline',),'cold pack':('cold pack','ice pack'),'compression wrap':('compression','elastic bandage'),'elbow brace':('elbow',),'ankle brace':('ankle',),'petroleum jelly':('petroleum','vaseline'),'antibiotic ointment':('antibiotic','neosporin'),'cough drops':('lozenge','cough drop'),'tissues':('tissue',),'thermometer':('thermometer',)}
     if not any(term in text for term in terms.get(key,(key,))):return False
+    if key in {'elbow brace','ankle brace'} and (not any(term in text for term in ('brace','support','stabilizer')) or 'bracelet' in text):return False
     if key=='ibuprofen' and (any(term in text for term in ('acetaminophen','naproxen','aspirin','dual action','diphenhydramine','pseudoephedrine','cold','sinus')) or re.search(r'\bpm\b',text)):return False
     if key=='acetaminophen' and (any(term in text for term in ('ibuprofen','nyquil','cold','flu','sinus','diphenhydramine')) or re.search(r'\bpm\b',text)):return False
     return True

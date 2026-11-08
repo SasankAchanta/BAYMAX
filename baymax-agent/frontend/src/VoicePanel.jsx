@@ -16,7 +16,7 @@ export default function VoicePanel({controlRef,soundDanger,result,mode,running,i
   if(!running){if(wasRunning.current)sourceEpoch.current++;wasRunning.current=false;gate.current.reset();return}
   wasRunning.current=true;
   const candidate=gate.current.update(result.monitoring||result,performance.now());
-  if(candidate)safety.current?.start({id:'pose-'+sourceEpoch.current+'-'+candidate.id,action:candidate.action,summary:result.summary});
+  if(candidate)safety.current?.start({id:'pose-'+sourceEpoch.current+'-'+candidate.id,action:candidate.action,confidence:candidate.confidence,held_ms:candidate.held_ms,summary:result.summary});
  },[result,running]);
  useEffect(()=>{if(soundDanger)safety.current?.start(soundDanger)},[soundDanger]);
  useEffect(()=>{if(verified?.confirmed)safety.current?.start({id:'verified-'+verified.id,action:verified.pose_action,summary:verified.summary})},[verified]);
@@ -28,12 +28,12 @@ export default function VoicePanel({controlRef,soundDanger,result,mode,running,i
   const blur=()=>loop.current?.stopPushToTalk();window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',blur);
   return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',blur)};
  },[]);
- const sending=checkIn?.status==='CONTACTING';
- const light=sending?'sending':!voice.active?'idle':voice.state==='LISTENING'?'listening':voice.state==='THINKING'?'received':'speaking';
- const status=sending?'Sending help request':voice.active?({LISTENING:'Listening to you',THINKING:'Response received',SPEAKING:'Baymax is speaking'}[voice.state]||'Here with you'):'Say “Hey Baymax”';
+ const sending=checkIn?.status==='CONTACTING'||checkIn?.contact?.delivery_pending;
+ const light=sending?'sending':voice.error?'error':!voice.enabled?'muted':!voice.active?'idle':voice.state==='LISTENING'?'listening':voice.state==='THINKING'?'received':'speaking';
+ const status=sending?'Sending help request':voice.error?(voice.message||'Connection interrupted · listening'):!voice.enabled?'Microphone paused':voice.active?({LISTENING:'Listening to you',THINKING:'Response received',SPEAKING:'Baymax is speaking'}[voice.state]||'Here with you'):'Say “Hey Baymax”';
  const blocked=!voice.enabled;
  return <div className="voiceBeacon" aria-label="Baymax voice assistant">
-  <BaymaxIcon speaking={voice.state==='SPEAKING'} light={light}/>
+  <BaymaxIcon speaking={voice.state==='SPEAKING'} light={light} level={voice.level??null}/>
   <span className="beaconStatus" role="status" aria-live="polite">{status}</span>
   {blocked&&<button className="voicePermission" onClick={()=>loop.current?.enable()}>Enable microphone</button>}
   <span className="srOnly" aria-live="polite">{checkIn?.contact?.message||voice.message}</span>

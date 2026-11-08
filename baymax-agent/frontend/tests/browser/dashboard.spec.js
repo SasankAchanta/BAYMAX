@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 test('flat monitor slides into searchable data console without remounting camera',async({page})=>{
  await page.route(/\/src\/vision(?:\.js)?(?:\?.*)?$/,r=>r.fulfill({contentType:'application/javascript',body:`export async function loadModels(){return {device:'cpu'}};export async function detectFrame(){return {person:null,points:null,objects:[]}};export function drawOverlay(){}`}));
  await page.route('**/api/care-database',r=>r.fulfill({json:{items:[{id:'example',name:'Cold pack',reason:'Supportive care',price_cents:-1,currency:'USD',guidance:'Use as directed.',buy_url:'https://www.amazon.com/s?k=cold+pack'}],database:{connected:true,name:'demo'},shopping:{configured:true}}}));
+ await page.route('**/api/decisions',r=>r.fulfill({json:{items:[{id:'persisted-demo',timestamp:'2026-11-08T12:00:00-06:00',kind:'vision_confirmed',action:'HOLDING_CHEST',confidence:89,status:'confirmed',items:['cold pack'],next_steps:'Start a spoken check-in'}],persistent:true}}));
  await page.goto('/');
  await expect(page.locator('.cameraHeader')).toContainText('CAMERA / VIDEO ON');
  await page.evaluate(()=>{window.__originalVideo=document.querySelector('video');window.__originalStream=window.__originalVideo.srcObject});
@@ -11,6 +12,10 @@ test('flat monitor slides into searchable data console without remounting camera
  await page.getByRole('button',{name:'Open Care Kit database'}).click();
  await expect(page.locator('.databaseView')).toHaveClass(/current/);
  await expect(page.locator('.databaseHeader h1')).toHaveText('Decision Logs');
+ await expect(page.locator('.decisionTable tbody')).toContainText('HOLDING_CHEST');
+ await expect(page.locator('.decisionTable tbody')).toContainText('89%');
+ await page.reload();await expect(page.locator('.cameraHeader')).toContainText('CAMERA / VIDEO ON');await page.evaluate(()=>{window.__originalVideo=document.querySelector('video');window.__originalStream=window.__originalVideo.srcObject});await page.getByRole('button',{name:'Open Care Kit database'}).click();
+ await expect(page.locator('.decisionTable tbody')).toContainText('HOLDING_CHEST');
  await expect(page.locator('.decisionTable th')).toHaveText(['Timestamp','Trigger / Behavior','Confidence','Action Taken','OTC / Care Items','Status']);
  expect(await page.locator('.databaseView').evaluate(el=>getComputedStyle(el).transitionDuration)).toContain('0.35s');
  await page.getByRole('button',{name:'Care History',exact:false}).click();

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SafetyCheck} from '../src/safety.js';
+import {SafetyCheck,needsHelp} from '../src/safety.js';
 function setup(request){let now=100000,prompts=[],escalations=[],logs=[];const check=new SafetyCheck({clock:()=>now,setTimer:()=>1,clearTimer:()=>{},request:request|| (async()=>({deadline_ms:now+60000})),onPrompt:t=>prompts.push(t),onEscalate:t=>escalations.push(t),onLog:l=>logs.push(l)});return {check,prompts,escalations,logs,advance:ms=>{now+=ms;check.tick()}}}
 test('local danger prompts immediately without VLM and repetition cannot extend 60-second deadline',async()=>{
  const x=setup();assert.equal(x.check.start({id:1,action:'HOLDING_CHEST'}),true);assert.match(x.prompts[0],/Are you okay/);await new Promise(r=>setImmediate(r));
@@ -44,4 +44,33 @@ test('completed SMS clears automatically and cannot block the next incident',asy
  timers.find(t=>t.ms===8000).fn();assert.equal(check.incident.action,'CLENCHING_STOMACH');
  check.respond("I'm okay");timers.filter(t=>t.ms===8000).at(-1).fn();assert.equal(check.incident,null);
  check.destroy();
+});
+
+
+test('explicit text command targets demo contact; negative commands never request help',()=>{
+ for(const phrase of ['send a text','please send me a text','Baymax send a text'])assert.equal(needsHelp(phrase),true);
+ for(const phrase of ['do not send a text',"don't send a text",'I heard someone say send a text'])assert.equal(needsHelp(phrase),false);
+});
+
+test('accepted SMS continues polling until delivered without another send',()=>{
+ const x=setup();x.check.start({id:'delivery',action:'HOLDING_CHEST'});const item=x.check.incident;
+ x.check.applyContact({status:'CONTACT_ACCEPTED',contact:{status:'accepted',delivery_pending:true}},item);
+ assert.equal(item.status,'CONTACT_ACCEPTED');assert.equal(item.pollCount,1);
+ x.check.applyContact({status:'CONTACT_DELIVERED',contact:{status:'delivered',message:'Delivered'}},item);
+ assert.equal(item.status,'CONTACT_DELIVERED');assert.deepEqual(x.escalations,['Delivered']);x.check.destroy();
+});
+
+
+test('possible choking registers immediate help without a response countdown',async()=>{
+ const requests=[];const x=setup(async(path,body)=>{requests.push(body);return {status:'CONTACTING',mode:'sms'}});
+ assert.equal(x.check.start({id:'neck-1',action:'POSSIBLE_CHOKING',held_ms:3200,confidence:90}),true);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(x.check.incident.status,'CONTACTING');assert.equal(requests[0].held_ms,3200);assert.match(x.prompts[0],/requesting help/);x.check.destroy();
+});
+
+
+test('spoken contact confirmation omits provider diagnostics',()=>{
+ const x=setup();x.check.start({id:'spoken-confirmation',action:'HOLDING_CHEST'});
+ x.check.applyContact({status:'CONTACT_ACCEPTED',contact:{status:'accepted',message:'Twilio accepted request: technical details',speech_message:'Your help message was submitted.'}},x.check.incident);
+ assert.deepEqual(x.escalations,['Your help message was submitted.']);x.check.destroy();
 });

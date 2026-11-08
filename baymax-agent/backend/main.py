@@ -17,6 +17,7 @@ from .tools import Tools
 from .agent import Agent, ProactiveVision, proactive_vision_enabled
 from .voice import is_acknowledgement
 from .voice_turn import router as voice_router
+# The shared TTS lifespan initializes ElevenLabs once for this API.
 from .tts import router as tts_router, tts_lifespan
 
 load_dotenv(Path(__file__).with_name('.env'))

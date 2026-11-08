@@ -72,3 +72,88 @@ button:focus-visible,input:focus-visible{outline:2px solid #137c9d;outline-offse
 .adminFooter{max-width:1400px;margin:24px auto 0;display:flex;align-items:center;justify-content:flex-end;gap:9px;color:#426f79}
 .adminFooter>span{font:8px var(--mono);letter-spacing:1px;opacity:.65}
 .adminFooter button{font:9px var(--mono);padding:5px 8px;background:#ffffff50;box-shadow:none;border-color:#16435b26}
+
+.scoreExplanation{display:block;font-size:9px;line-height:1.6;color:#627f87;margin-top:7px}
+.voiceBeacon .light-error .baymaxFace i,.voiceBeacon .light-error .baymaxFace b{background:#bb7919;box-shadow:0 0 13px #d9a04288}
+.voiceBeacon .light-muted{background:#edf1ef;box-shadow:0 3px 0 #b4cbc3}
+.voiceBeacon .light-muted .baymaxFace i,.voiceBeacon .light-muted .baymaxFace b{background:#788584}
+.beaconStatus{max-width:190px}
+.consoleTag{max-width:160px;white-space:normal;overflow-wrap:anywhere}
+
+.voiceBeacon .baymaxIcon.isSpeaking[data-audio-level=live]{animation:none;transform:scale(calc(1 + var(--voice-level)*.1));box-shadow:0 4px 0 #d7f2e9,0 0 calc(12px + var(--voice-level)*30px) #147dcb66;transition:transform 100ms linear,box-shadow 100ms linear}
+@media(prefers-reduced-motion:reduce){.voiceBeacon .baymaxIcon.isSpeaking[data-audio-level=live]{transform:none;transition:none}}
+
+/* A mirrored fieldbook spread: live photograph left, annotation sheet right. */
+.fieldbook{grid-template-columns:minmax(0,65fr) minmax(0,35fr);background:#f8fcf8;border-color:#ffffffa0;box-shadow:3px 4px 0 #1a667b12;overflow:visible;position:relative}
+.fieldbook .cameraCard{padding:22px 26px 20px;background:linear-gradient(105deg,#f6fcf6,#edf8f2);min-width:0}
+.photoPageHeading{display:flex;justify-content:space-between;gap:12px;font:9px var(--mono);letter-spacing:1.2px;color:#577f88;margin:0 0 18px}
+.fieldbook .focusModes{top:67px;left:40px}
+.fieldbook .videoWrap{aspect-ratio:16/10;border:1px solid #b5cec9;border-radius:1px;box-shadow:3px 4px 0 #16556a10;background:#153943}
+.fieldbook .videoLabel{font-size:8px;background:#f4fff1e8;border-color:#e4f1e7}
+.fieldbook .controls{padding:12px 0 0;background:transparent;border:0;min-height:42px;gap:7px}
+.fieldbook .controls button,.fieldbook .controls .fileButton{background:transparent;border:0;border-bottom:1px solid #8eb0b377;box-shadow:none;padding:4px 3px;margin-right:8px;border-radius:0}
+.fieldbook .behaviorCard{padding:24px 29px 20px;border-left:1px solid #c4dad4;background:linear-gradient(90deg,#daeae340,#fbfdf9 22px);position:relative}
+.fieldbook .behaviorCard:before{content:'';position:absolute;top:0;bottom:0;left:-7px;width:7px;pointer-events:none;background:linear-gradient(90deg,transparent,#325c6510)}
+.fieldbook .behaviorCard .cameraCardTitle{border-bottom:1px solid #91b9b65c;padding-bottom:17px}
+.fieldbook .behaviorCard .cameraCardTitle h2{font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:400;letter-spacing:-.5px}
+.fieldbook .behaviorCard .cameraCardTitle>span{font:8px var(--mono);letter-spacing:.6px}
+.fieldbook .behaviorPrimary{padding:22px 0 15px;gap:10px;align-items:center}
+.fieldbook .behaviorPrimary h3{font:500 clamp(19px,2vw,28px)/1.25 var(--mono);letter-spacing:-.8px;flex-basis:160px}
+.fieldbook .behaviorConfidence>strong{font-size:26px}
+.fieldbook .behaviorDescription{font-size:12px;line-height:1.8;margin:18px 0 22px}
+.fieldbook .behaviorProgress{border:0;position:relative;padding-left:0}
+.fieldbook .behaviorProgress>div{padding:12px 0;border-color:#a5c6bd55;gap:6px;position:relative}
+.fieldbook .behaviorProgress>div>span{font-size:12px;gap:9px}
+.fieldbook .behaviorProgress>div>span:before{display:none}
+.noteIndex{font:9px var(--mono);color:#5a8d93;font-style:normal;border-bottom:1px solid #6fa3a3;align-self:center;padding-bottom:2px}
+.fieldbook .behaviorProgress small{padding-left:27px;font-size:10px}
+.fieldbook .behaviorProgress .observed .noteIndex{color:#a7533e;border-color:#a7533e}
+.fieldbookFootnote{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:12px;color:#70908d;line-height:1.6;margin:20px 0 0}
+.cameraAnnotations{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;filter:drop-shadow(0 1px 2px #123a4b)}
+.cameraAnnotations circle{fill:#e9fff0;stroke:#398c99;stroke-width:1.5}
+.cameraAnnotations path{fill:none;stroke:#c5f8ed;stroke-width:1;stroke-dasharray:2 2}
+.cameraAnnotations text{font:9px var(--mono);letter-spacing:1px;fill:#edfff8;paint-order:stroke;stroke:#163f4b;stroke-width:2px;stroke-linejoin:round}
+.fieldbook .activityCard{background:#f3faf3;border-color:#b8d3c96b}
+@media(min-width:1400px){.fieldbook .videoWrap{aspect-ratio:16/10}.fieldbook .behaviorProgress>div{padding:17px 0}.fieldbook .behaviorDescription{margin:22px 0 26px}.fieldbook .behaviorPrimary{padding-top:28px}}
+@media(max-width:800px){.fieldbook{grid-template-columns:1fr;overflow:hidden}.fieldbook .cameraCard{padding:17px}.photoPageHeading{font-size:8px;margin-bottom:13px}.fieldbook .focusModes{top:52px;left:28px}.fieldbook .behaviorCard{padding:23px;border-left:0;border-top:1px solid #c4dad4}.fieldbook .behaviorCard:before{display:none}.fieldbook .videoWrap{aspect-ratio:16/10}.fieldbookFootnote{margin-top:18px}}
+
+/* MedMax: bold, compressed lettering inspired by the supplied title reference. */
+.cameraHeader h1.medmaxTitle,.databaseHeader h1.medmaxTitle{font-family:Impact,'Arial Narrow','Franklin Gothic Heavy',sans-serif;font-size:clamp(42px,4.6vw,68px);font-weight:900;font-style:italic;line-height:.98;letter-spacing:-1.8px;text-transform:uppercase;color:#164e6a;text-shadow:2px 2px 0 #eaffef80;transform:skewX(-5deg);transform-origin:left center;margin:5px 0 0}
+.cameraHeader h1.medmaxTitle>span{display:inline-block;font:9px var(--mono);font-style:normal;font-weight:400;letter-spacing:.4px;line-height:1.5;vertical-align:middle;margin-left:24px;text-shadow:none;transform:skewX(5deg)}
+.databaseView{isolation:isolate;min-height:calc(100dvh - 100px)}
+.databaseView:before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:url('/images/medmax-city.jpg') center center/cover no-repeat;opacity:.17;filter:saturate(.55);mask-image:linear-gradient(to bottom,transparent 2%,#000 24%,#000 90%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent 2%,#000 24%,#000 90%,transparent)}
+.databaseView .databaseTableWrap{background:#fcfdfbf5}
+.databaseView .databaseNotice{background:#f4fff2e6}
+.databaseView .databaseFootnote{display:inline-block;background:#f2fff1bd;padding:8px 10px;border-radius:2px}
+@media(max-width:800px){.cameraHeader h1.medmaxTitle,.databaseHeader h1.medmaxTitle{font-size:42px;letter-spacing:-1px}.cameraHeader h1.medmaxTitle>span{display:block;margin:10px 0 0;font-size:8px}.databaseView:before{background-position:45% center;opacity:.13}}
+
+/* Shared companion size, and a warmer city canvas for both data tabs. */
+.voiceBeacon .baymaxIcon,.databaseHeaderActions .baymaxIcon{display:inline-flex;width:78px;height:78px;border-radius:20px;flex-shrink:0}
+.voiceBeacon .baymaxFace i,.databaseHeaderActions .baymaxFace i{width:11px;height:11px}
+.voiceBeacon .baymaxFace b,.databaseHeaderActions .baymaxFace b{width:26px}
+.appShell:has(.pageViewport[data-view=database]){background:linear-gradient(120deg,#eee5d0,#f4efdf 55%,#e0e8db)}
+.databaseView:before{opacity:.32;filter:saturate(.85);mask-image:linear-gradient(to bottom,transparent 1%,#000 20%,#000 94%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent 1%,#000 20%,#000 94%,transparent)}
+.databaseView .databaseTableWrap{background:#fffefbf5}
+.databaseView .databaseTable th{background:#f5f2e9}
+.databaseView .databaseTable tr:hover td{background:#f2f3e9}
+.databaseView .databaseNotice{background:#fffdf1e8}
+.databaseView .databaseFootnote{background:#fffdf2d6}
+.databaseView .consoleSearch label{background:#fffefbf2}
+@media(max-width:800px){.voiceBeacon .baymaxIcon,.databaseHeaderActions .baymaxIcon{display:inline-flex;width:64px;height:64px;border-radius:17px}.voiceBeacon .baymaxFace i,.databaseHeaderActions .baymaxFace i{width:9px;height:9px}.voiceBeacon .baymaxFace b,.databaseHeaderActions .baymaxFace b{width:21px}}
+
+/* Full database canvas: original city artwork beneath a neutral readability wash. */
+.appShell:has(.pageViewport[data-view=database]){background:#e9ece8;position:relative}
+.appShell:has(.pageViewport[data-view=database]):before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:url('/images/medmax-database-city.png') center center/cover no-repeat}
+.appShell:has(.pageViewport[data-view=database])>.ambientGlow{display:none}
+.databaseView:before{display:none}
+.databaseView .databaseTableWrap{background:#fffefbf7}
+.databaseView .databaseTable th{background:#f6f7f3}
+.databaseView .databaseTable tr:hover td{background:#f0f4f0}
+.databaseView .consoleSearch label,.databaseView .databaseNotice{background:#ffffffed}
+.databaseView .databaseFootnote{background:#ffffffdb}
+
+/* Animated cyan-to-mint canvas for the data console. */
+.appShell:has(.pageViewport[data-view=database]){background:linear-gradient(125deg,#22b8cf,#66cdd2,#a3e9d7,#55c4cf);background-size:250% 250%;animation:databaseGradientDrift 22s ease-in-out infinite}
+.appShell:has(.pageViewport[data-view=database]):before{display:none}
+@keyframes databaseGradientDrift{0%,100%{background-position:0% 35%}50%{background-position:100% 65%}}
+@media(prefers-reduced-motion:reduce){.appShell:has(.pageViewport[data-view=database]){animation:none;background-position:50% 50%}}

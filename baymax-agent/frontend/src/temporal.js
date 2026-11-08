@@ -25,7 +25,7 @@ export class TemporalPose {
   return {points,lying,fall:this.fallen&&lying,dropVelocity:this.fallen?this.lastDropVelocity:dropVelocity,horizontalMs};
  }
 }
-export const ANOMALIES=['SUDDEN_FALL','LYING_DOWN','HOLDING_CHEST','CLENCHING_STOMACH','COUGHING','SNEEZING','FALL_DETECTED','SITTING_HEAD_DOWN','LIMPING','HOPPING','GUARDING_ARM','LYING_TOO_LONG'];
+export const ANOMALIES=['POSSIBLE_CHOKING','SUDDEN_FALL','LYING_DOWN','HOLDING_CHEST','CLENCHING_STOMACH','COUGHING','SNEEZING','FALL_DETECTED','SITTING_HEAD_DOWN','LIMPING','HOPPING','GUARDING_ARM','LYING_TOO_LONG'];
 export class AnomalyGate {
  constructor(){this.reset()}
  reset(){this.timers=new Map();this.last=null;this.episode=0}
@@ -34,7 +34,7 @@ export class AnomalyGate {
   const matured=ANOMALIES.find(action=>Number.isFinite(result.triggerDurations?.[action]));
   for(const action of this.timers.keys())if(!result.scores?.some(s=>s.label===action&&s.score>0))this.timers.delete(action);
   if(matured){const action=matured;if(!this.timers.has(action))this.timers.set(action,{since:now,id:++this.episode});const timer=this.timers.get(action);return {action,id:timer.id,confidence:result.scores.find(s=>s.label===action)?.score||0,held_ms:result.triggerDurations[action]}}
-  const active=ANOMALIES.filter(action=>!['LYING_DOWN','HOLDING_CHEST','CLENCHING_STOMACH','COUGHING','SNEEZING','SUDDEN_FALL'].includes(action)&&result.scores?.some(s=>s.label===action&&s.score>0));
+  const active=ANOMALIES.filter(action=>!['POSSIBLE_CHOKING','LYING_DOWN','HOLDING_CHEST','CLENCHING_STOMACH','COUGHING','SNEEZING','SUDDEN_FALL'].includes(action)&&result.scores?.some(s=>s.label===action&&s.score>0));
   for(const action of this.timers.keys())if(!active.includes(action))this.timers.delete(action);
   for(const action of active)if(!this.timers.has(action))this.timers.set(action,{since:now,id:++this.episode});
   for(const action of ANOMALIES){const timer=this.timers.get(action);if(timer&&now-timer.since>=1800)return {action,id:timer.id,confidence:result.scores.find(s=>s.label===action).score,held_ms:now-timer.since}}

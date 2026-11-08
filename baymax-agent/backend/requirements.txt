@@ -5,7 +5,5 @@ openai>=1.60,<3
 httpx>=0.28,<1
 pytest>=8,<10
 tzdata>=2025.1
-chatterbox-tts==0.1.7
-torchaudio
-# Perth watermarking still imports pkg_resources.
-setuptools>=80,<82
+
+elevenlabs>=2.77,<3

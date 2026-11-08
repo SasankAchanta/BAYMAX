@@ -10,6 +10,7 @@ import VoicePanel from './VoicePanel';
 import SoundMonitor from './SoundMonitor';
 import CareDatabase from './CareDatabase';
 import BaymaxIcon from './BaymaxIcon';
+import CameraAnnotations from './CameraAnnotations';
 import {VerificationPipeline,verifyPose} from './verification';
 const empty={scores:LABELS.map(label=>({label,score:0})),summary:'Starting the camera. Allow camera access in your browser.',lyingSeconds:0,review:false};
 function App(){
@@ -84,7 +85,7 @@ function App(){
     let next;
     const detections=models.current?await detectFrame(models.current,capture):{person:null,points:null,objects:[]};
     if(cancelled||token!==generation.current)return;
-    const raw={now,...detections,frameHeight:capture.height};
+    const raw={now,...detections,frameHeight:capture.height,frameWidth:capture.width};
     const base=tracker.current.update(raw),body=focus.current.update(raw,'body',base);
     next=behavior.current.update(raw,mode,body);
     overlay.current.width=capture.width;overlay.current.height=capture.height;
@@ -99,23 +100,23 @@ function App(){
  const behaviorReady=running&&detectorReady&&top?.score>0;
  const behaviorLabel=!running?'Camera paused':!detectorReady?'Loading detector':top?.score>0?top.label.replaceAll('_',' ').toLowerCase():'Observing';
  const currentCandidate=result.behaviorCandidates?.find(c=>c.label===top?.label);
- const behaviorAlert=behaviorReady&&(top?.label!=='LYING_DOWN'||result.review)&&(!currentCandidate||currentCandidate.issue)&&['SUDDEN_FALL','CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING','LYING_DOWN','LIMPING','HOPPING','SITTING_HEAD_DOWN'].includes(top.label);
+ const behaviorAlert=behaviorReady&&(top?.label!=='LYING_DOWN'||result.review)&&(!currentCandidate||currentCandidate.issue)&&['POSSIBLE_CHOKING','SUDDEN_FALL','CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING','LYING_DOWN','LIMPING','HOPPING','SITTING_HEAD_DOWN'].includes(top.label);
 
  return <main className="appShell monitorOnly">
  <div className="ambientGlow" aria-hidden="true"/>
  <div className="pageViewport" data-view={view}><section className={"cameraView slidePage "+(view==='monitor'?'current':'')} inert={view!=='monitor'} aria-hidden={view!=='monitor'} aria-label="Camera / Activity Monitor">
-  <header className="cameraHeader"><div><span className="eyebrow">BAYMAX / YOUR SPACE</span><h1>Camera & activity<span className={running?'live':''}>{running?'● CAMERA / VIDEO ON':'○ CAMERA OFF'}</span></h1></div><div className="monitorNavigation"><button className="databaseArrow" onClick={()=>setView('database')} aria-label="Open Care Kit database" title="Open Care Kit database">Database →</button><VoicePanel controlRef={voiceControl} soundDanger={soundDanger} result={result} mode={mode} running={running} inspect={inspectForVoice} onVoiceChange={setVoice} onCareKit={setCareKit} verified={verified} onAgentLog={recordEvent}/></div></header>
-  <section className="monitor">
-   <div className="cameraCard"><div className="cameraCardTitle"><h2>Live monitor</h2><span>Focus on what matters</span></div>
+  <header className="cameraHeader"><div><span className="eyebrow">MEDMAX / YOUR SPACE</span><h1 className="medmaxTitle">MedMax<span className={running?'live':''}>{running?'● CAMERA / VIDEO ON':'○ CAMERA OFF'}</span></h1></div><div className="monitorNavigation"><button className="databaseArrow" onClick={()=>setView('database')} aria-label="Open Care Kit database" title="Open Care Kit database">Database →</button><VoicePanel controlRef={voiceControl} soundDanger={soundDanger} result={result} mode={mode} running={running} inspect={inspectForVoice} onVoiceChange={setVoice} onCareKit={setCareKit} verified={verified} onAgentLog={recordEvent}/></div></header>
+  <section className="monitor fieldbook">
+   <div className="cameraCard"><div className="photoPageHeading"><span>01 / LIVE OBSERVATION</span><span>{modeName.toUpperCase()}</span></div><div className="cameraCardTitle"><h2>Live monitor</h2><span>Focus on what matters</span></div>
     <div className="focusModes" role="group" aria-label="Focus mode">{[['upper','Upper Body'],['body','Full Body']].map(([key,name])=><button key={key} aria-pressed={mode===key} onClick={()=>changeMode(key)}>{name}</button>)}</div>
     <div className="modeStatus">ACTIVE MODE: {modeName}</div>
-    <div className="videoWrap"><video ref={video} autoPlay muted playsInline onEnded={()=>{setRunning(false);tracker.current.reset();setResult({...empty,summary:'Video ended. Start the camera or choose another clip.'})}} onError={()=>setError('This video could not be played. Choose a browser-supported MP4 or WebM.')} /><canvas ref={overlay}/>{!running&&<div className="placeholder">{error?'CAMERA UNAVAILABLE':'WAITING FOR CAMERA'}</div>}<div className={'videoLabel '+(result.review?'danger':'')}>{modeName.toUpperCase()} / {detectorReady&&running?top?.label:'LOADING DETECTOR'}{detectorReady&&running&&<span>{top?.score}%</span>}</div></div>
+    <div className="videoWrap"><video ref={video} autoPlay muted playsInline onEnded={()=>{setRunning(false);tracker.current.reset();setResult({...empty,summary:'Video ended. Start the camera or choose another clip.'})}} onError={()=>setError('This video could not be played. Choose a browser-supported MP4 or WebM.')} /><canvas ref={overlay}/>{skeleton&&<CameraAnnotations points={result.points} width={overlay.current?.width} height={overlay.current?.height}/>}{!running&&<div className="placeholder">{error?'CAMERA UNAVAILABLE':'WAITING FOR CAMERA'}</div>}<div className={'videoLabel '+(result.review?'danger':'')}>{modeName.toUpperCase()} / {detectorReady&&running?top?.label:'LOADING DETECTOR'}{detectorReady&&running&&<span>{top?.score}%</span>}</div></div>
     <div className="controls"><button onClick={()=>startCamera(selected)}>Start camera</button><button onClick={stop} disabled={!running}>Stop</button>{cameras.length>1&&<select aria-label="Camera" value={selected} onChange={e=>{setSelected(e.target.value);startCamera(e.target.value)}}>{cameras.map(c=><option key={c.deviceId} value={c.deviceId}>{c.label||'Camera'}</option>)}</select>}<label className="fileButton">Test a video<input type="file" accept="video/*" onChange={useClip}/></label><label className="toggle"><input type="checkbox" checked={skeleton} onChange={e=>setSkeleton(e.target.checked)}/> Skeleton</label></div>
     {error&&<p role="alert" className="error">{error}</p>}
 
    </div>
    <section className={'behaviorCard '+(behaviorAlert?'behaviorAlert':'')} aria-label="Current behavior">
-    <div className="cameraCardTitle"><h2>Behavior & status</h2><span>{modeName}</span></div>
+    <div className="cameraCardTitle"><h2>Observation notes</h2><span>02 / BEHAVIOR</span></div>
     <div className="behaviorPrimary" role="status" aria-live="polite" aria-atomic="true">
      <h3>{behaviorLabel}</h3>{currentCandidate&&!currentCandidate.issue&&<p className="observingBehavior">Observing · not an issue yet</p>}
      {behaviorReady&&<div className="behaviorConfidence"><strong>{Math.round(top.score)}<span>%</span></strong><span>Detection confidence</span></div>}
@@ -123,9 +124,10 @@ function App(){
     {behaviorReady&&<div className="behaviorMeter" aria-hidden="true"><span style={{width:`${top.score}%`}}/></div>}
     <p className="behaviorDescription">{!running?'Start the camera to see live activity.':result.summary}</p>
     
-    {<div className="behaviorProgress" aria-label="Upper body behavior tracking">{['CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING'].map(label=>{const candidate=result.behaviorCandidates?.find(c=>c.label===label);return <div key={label} className={candidate?'observed':''}><span>{label.replaceAll('_',' ').toLowerCase()}</span><strong>{candidate?`${(candidate.held_ms/1000).toFixed(1)}s / >2s`:'—'}</strong><small>{candidate?(candidate.issue?'Awaiting visual verification':'Observing · not an issue yet'):'Not observed'}</small></div>})}</div>}
+    {<div className="behaviorProgress" aria-label="Upper body behavior tracking">{['POSSIBLE_CHOKING','CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING'].map((label,index)=>{const candidate=result.behaviorCandidates?.find(c=>c.label===label);return <div key={label} className={candidate?'observed':''}><span><em className="noteIndex">{String(index+1).padStart(2,'0')}</em>{label.replaceAll('_',' ').toLowerCase()}</span><strong>{candidate?`${(candidate.held_ms/1000).toFixed(1)}s / >${(candidate.required_ms||2000)/1000}s`:'—'}</strong><small>{candidate?(candidate.issue?'Awaiting visual verification':'Observing · not an issue yet'):'Not observed'}</small></div>})}</div>}
+    <p className="fieldbookFootnote">Live observations, not a diagnosis.<br/>Keep the area you want monitored in view.</p>
    </section>
-   <aside className="activityCard"><div className="cameraCardTitle"><h2>Activity insights</h2><span className="liveDot"/></div><p className="summary" aria-live="polite">{result.summary}</p>
+   <aside className="activityCard"><div className="cameraCardTitle"><h2>Activity insights</h2><span className="liveDot"/></div><p className="summary" aria-live="polite">{result.framingHint||result.summary}<small className="scoreExplanation">Scores describe pose evidence, not a diagnosis or calibrated probability.</small></p>
     <div className="metrics"><div>INFERENCE<span>{latency?`${Math.round(latency)} MS`:'—'}</span></div><div>LYING TIMER<span>{result.lyingSeconds.toFixed(1)} / 15 S</span></div></div>
     {<div className={'review '+(result.review?'danger':'')} role="status">{result.review?'PROLONGED LYING · AWAITING VERIFICATION':result.lyingSeconds>0?'LYING DOWN · OBSERVING':'LOCAL MONITORING ACTIVE'}<span>{result.review?'Check-in requested; Stage 2 verifies the visual evidence in parallel.':'Watching posture and movement.'}</span></div>}
     <div className="ranking">{result.scores.filter(s=>s.score>0).slice(0,3).map(({label,score},i)=><div key={label} className={'row '+(i===0?'leading ':'')+(score>0&&(label==='FALL_DETECTED'||label==='LYING_TOO_LONG')?'danger':'')}><div className="bar" style={{width:`${score}%`}}/><span>{score.toFixed(1)}%</span><strong>{label}</strong></div>)}</div>

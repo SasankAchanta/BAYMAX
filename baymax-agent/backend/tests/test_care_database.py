@@ -140,3 +140,14 @@ def test_manual_item_rejects_blank_fields(database):
     assert client.post('/api/care-database/items',json={'name':'  ','reason':'Kit'}).status_code==422
     assert client.post('/api/care-database/items',json={'name':' a ','reason':'Kit'}).status_code==422
     assert client.post('/api/care-database/items',json={'name':'Gauze','reason':'  '}).status_code==422
+
+
+def test_repeat_recommendation_preserves_live_offer(database,monkeypatch):
+    async def run():
+        await database.seed();row=database.rows['ibuprofen'];row.update(price_cents=1299,price_status='live_quote',buy_url='https://www.amazon.com/dp/B012345678',product_name='Ibuprofen')
+        async def destructive_upsert(value):database.rows[value['id']]=value
+        monkeypatch.setattr(database,'upsert',destructive_upsert)
+        await care_database.save_recommendations({'items':[{'id':'ibuprofen'}]},'Discuss suitability with pharmacist')
+        assert database.rows['ibuprofen']['price_cents']==1299
+        assert database.rows['ibuprofen']['buy_url'].endswith('B012345678')
+    asyncio.run(run())
