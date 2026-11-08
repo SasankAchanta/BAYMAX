@@ -1,0 +1,25 @@
+import {test,expect} from '@playwright/test';
+test('flat monitor slides into searchable data console without remounting camera',async({page})=>{
+ await page.route(/\/src\/vision(?:\.js)?(?:\?.*)?$/,r=>r.fulfill({contentType:'application/javascript',body:`export async function loadModels(){return {device:'cpu'}};export async function detectFrame(){return {person:null,points:null,objects:[]}};export function drawOverlay(){}`}));
+ await page.route('**/api/care-database',r=>r.fulfill({json:{items:[{id:'example',name:'Cold pack',reason:'Supportive care',price_cents:-1,currency:'USD',guidance:'Use as directed.',buy_url:'https://www.amazon.com/s?k=cold+pack'}],database:{connected:true,name:'demo'},shopping:{configured:true}}}));
+ await page.goto('/');
+ await expect(page.locator('.cameraHeader')).toContainText('CAMERA / VIDEO ON');
+ await page.evaluate(()=>{window.__originalVideo=document.querySelector('video');window.__originalStream=window.__originalVideo.srcObject});
+ const camera=await page.locator('.cameraCard').boundingBox(),behavior=await page.locator('.behaviorCard').boundingBox();
+ expect(camera.width/(camera.width+behavior.width)).toBeCloseTo(.65,1);
+ await page.screenshot({path:'tests/fixtures/flat-monitor.png',fullPage:true});
+ await page.getByRole('button',{name:'Open Care Kit database'}).click();
+ await expect(page.locator('.databaseView')).toHaveClass(/current/);
+ await expect(page.locator('.databaseHeader h1')).toHaveText('Decision Logs');
+ await expect(page.locator('.decisionTable th')).toHaveText(['Timestamp','Trigger / Behavior','Confidence','Action Taken','OTC / Care Items','Status']);
+ expect(await page.locator('.databaseView').evaluate(el=>getComputedStyle(el).transitionDuration)).toContain('0.35s');
+ await page.getByRole('button',{name:'Care History',exact:false}).click();
+ await expect(page.locator('.databaseTable:visible')).toContainText('Cold pack');
+ await page.getByRole('searchbox',{name:'Search database'}).fill('no match');
+ await expect(page.locator('.databaseTableWrap:visible tbody tr')).toHaveCount(0);
+ await page.getByRole('searchbox',{name:'Search database'}).fill('');
+ await page.screenshot({path:'tests/fixtures/flat-database.png',fullPage:true});
+ await page.getByRole('button',{name:'Return to camera monitor'}).click();
+ await expect(page.locator('.cameraView')).toHaveClass(/current/);
+ expect(await page.evaluate(()=>window.__originalVideo===document.querySelector('video')&&window.__originalStream===document.querySelector('video').srcObject)).toBe(true);
+});

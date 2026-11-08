@@ -3,7 +3,7 @@ import BaymaxIcon from './BaymaxIcon';
 import {VoiceLoop,dangerState} from './voiceLoop';
 import {AnomalyGate} from './temporal';
 import {SafetyCheck,SAFETY_OPENINGS,needsHelp} from './safety';
-export default function VoicePanel({soundDanger,result,mode,running,inspect,onVoiceChange,onConversationStart,onCareKit,verified,onAgentLog}){
+export default function VoicePanel({controlRef,soundDanger,result,mode,running,inspect,onVoiceChange,onConversationStart,onCareKit,verified,onAgentLog}){
  const current=useRef();current.current={result,mode,inspect,onVoiceChange,onConversationStart,onCareKit,onAgentLog};
  const [voice,setVoice]=useState({state:'IDLE',enabled:false,active:false,message:'Starting hands-free wake listening…'});
  const loop=useRef(),safety=useRef(),gate=useRef(new AnomalyGate()),sourceEpoch=useRef(0),wasRunning=useRef(false);
@@ -11,7 +11,7 @@ export default function VoicePanel({soundDanger,result,mode,running,inspect,onVo
  useEffect(()=>{const checks=new SafetyCheck({onChange:setCheckIn,onLog:entry=>current.current.onAgentLog?.(entry),onPrompt:text=>loop.current?.safetyCheckIn(text),onEscalate:(text,options)=>loop.current?.safetyCheckIn(text,!options?.final)});safety.current=checks;const controller=new VoiceLoop({host:window,onTranscript:text=>{const help=needsHelp(text,checks.incident?.status==='AWAITING_RESPONSE'&&!['LIMPING','HOPPING','GUARDING_ARM'].includes(checks.incident?.action));checks.respond(text);return help?'help_requested':false},onChange:state=>{setVoice(state);current.current.onVoiceChange?.(state)},onConversationStart:()=>current.current.onConversationStart?.(),onCareKit:kit=>current.current.onCareKit?.(kit),inspect:(request,signal)=>current.current.inspect(request,signal),getVision:()=>{
   const {result,mode}=current.current;const top=result.scores[0];
   return {mode,action:top?.label||'UNKNOWN',confidence:top?.score||0,danger:dangerState(result),summary:result.summary.slice(0,1500)};
- }});loop.current=controller;controller.enable();return()=>{checks.destroy();controller.destroy()}},[]);
+ }});loop.current=controller;if(controlRef)controlRef.current=controller;controller.enable();return()=>{if(controlRef)controlRef.current=null;checks.destroy();controller.destroy()}},[]);
  useEffect(()=>{
   if(!running){if(wasRunning.current)sourceEpoch.current++;wasRunning.current=false;gate.current.reset();return}
   wasRunning.current=true;

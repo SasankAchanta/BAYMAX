@@ -1,0 +1,74 @@
+/* Flat monitor and data console. Presentation only. */
+:root{--ink:#16435b;--muted:#607781;--hairline:rgba(15,23,42,.12);--paper:#fcfdfb;--mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Consolas,monospace;font-family:Inter,'Segoe UI',sans-serif;color:var(--ink)}
+.appShell{padding:28px 36px;background:linear-gradient(120deg,#22b8cf,#a3e9d7);overflow-x:clip}
+button,.fileButton,select,input,textarea{border:1px solid var(--hairline);border-radius:3px;background:#fff;color:var(--ink)}
+button,.fileButton{box-shadow:2px 2px 0 rgba(15,23,42,.05)}
+button:hover:not(:disabled),.fileButton:hover{background:#e8f8f6}
+button:focus-visible,input:focus-visible{outline:2px solid #137c9d;outline-offset:3px}
+.eyebrow,.modeStatus,.videoLabel,.metrics,.sensorBar,.beaconStatus,.databaseConnection,.databaseTable th,.consoleCaption,.consoleTag,.consoleTabs span,.databaseTable time{font-family:var(--mono)}
+.eyebrow{font-size:9px;letter-spacing:1.8px}
+.pageViewport{position:relative;display:grid;max-width:1400px;margin:0 auto;overflow:hidden;isolation:isolate}
+.slidePage{grid-area:1/1;width:100%;min-width:0;margin:0;max-width:none;transition:transform 350ms cubic-bezier(.22,1,.36,1),visibility 0s 350ms;will-change:transform;visibility:hidden;pointer-events:none;position:absolute;top:0}
+.slidePage.current{position:relative;visibility:visible;pointer-events:auto;transition:transform 350ms cubic-bezier(.22,1,.36,1),visibility 0s}
+.cameraView{transform:translateX(-105%)}
+.databaseView{transform:translateX(105%)}
+.slidePage.current{transform:translateX(0)}
+.cameraHeader,.databaseHeader{min-height:90px;margin-bottom:24px}
+.cameraHeader h1,.databaseHeader h1{font-size:29px;font-weight:500;letter-spacing:-1px}
+.monitorNavigation{gap:22px}
+.databaseArrow{width:auto;height:auto;font:11px var(--mono);padding:11px 15px;background:#ffffffb8;border-radius:3px;white-space:nowrap}
+.voiceBeacon{min-width:98px;gap:7px}
+.voiceBeacon .baymaxIcon{width:62px;height:62px;border-radius:15px}
+.voiceBeacon .baymaxFace i{width:9px;height:9px}.voiceBeacon .baymaxFace b{width:21px}
+.beaconStatus{font-size:9px}
+.monitor{grid-template-columns:minmax(0,65fr) minmax(0,35fr);gap:0;background:var(--paper);border:1px solid var(--hairline);border-radius:3px;box-shadow:3px 3px 0 rgba(15,23,42,.08);overflow:hidden}
+.cameraCard{position:relative;padding:0;background:none;border:0;border-radius:0;backdrop-filter:none;grid-column:1;min-width:0}
+.cameraCard>.cameraCardTitle,.modeStatus{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.focusModes{position:absolute;top:14px;left:14px;z-index:3;gap:0;margin:0;box-shadow:2px 2px 0 #0f172414}
+.focusModes button{min-width:0;font:10px var(--mono);padding:9px 12px;background:#f7fcf5e8;border-radius:0;box-shadow:none;border-color:#ffffff80;backdrop-filter:blur(5px)}
+.focusModes button:first-child{border-radius:2px 0 0 2px}.focusModes button:last-child{border-radius:0 2px 2px 0}
+.focusModes button[aria-pressed=true]{background:#174e6b;color:#fff;box-shadow:none}
+.videoWrap{border-radius:0;aspect-ratio:4/3;background:#102f3b}
+.videoWrap video,.videoWrap canvas{object-fit:contain}
+.videoLabel{border:1px solid #ffffff88;bottom:12px;left:12px;font-size:9px;border-radius:2px;backdrop-filter:blur(6px)}
+.controls{margin:0;min-height:52px;padding:10px 14px;gap:9px;border-top:1px solid var(--hairline);background:#f7faf7}
+.controls button,.controls .fileButton{font:10px var(--mono);padding:6px 9px;background:#fff;border-radius:2px;box-shadow:none}
+.toggle{font:10px var(--mono)}
+.behaviorCard{grid-column:2;grid-row:1;position:static;min-height:0;height:100%;padding:25px 26px;border:0;border-left:1px solid var(--hairline);border-radius:0;background:none;backdrop-filter:none}
+.behaviorCard .cameraCardTitle{padding-bottom:18px;border-bottom:1px solid var(--hairline);margin-bottom:0}
+.cameraCardTitle h2{font-size:13px;font-weight:600}
+.behaviorPrimary{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:24px 0 18px}
+.behaviorPrimary h3{font:500 clamp(19px,2.1vw,30px)/1.25 var(--mono);letter-spacing:-1px;text-transform:uppercase;margin:0;flex:1 1 190px;overflow-wrap:normal}
+.behaviorConfidence{gap:6px}.behaviorConfidence>strong{font:500 27px var(--mono);letter-spacing:-1px}.behaviorConfidence strong span{font:14px var(--mono)}.behaviorConfidence>span{display:none}
+.observingBehavior{font:10px var(--mono);order:3;flex:1 0 100%;margin:0}
+.behaviorMeter{height:3px;border-radius:0;background:#deece9}.behaviorMeter>span{background:#21899f}
+.behaviorDescription{font-size:12px;line-height:1.7;margin:19px 0 22px;color:var(--muted)}
+.behaviorProgress{border-top:1px solid var(--hairline);padding:0;margin:0}
+.behaviorProgress>div{padding:15px 0;display:grid;grid-template-columns:1fr auto;gap:7px;border-bottom:1px solid var(--hairline)}
+.behaviorProgress>div>span{font-size:12px;text-transform:capitalize;display:flex;align-items:center;gap:8px}
+.behaviorProgress>div>span:before{content:'';width:5px;height:5px;background:#9aabad;display:inline-block}
+.behaviorProgress>div.observed>span:before{background:#dc7358;box-shadow:2px 2px 0 #dc735825}
+.behaviorProgress strong{font:10px var(--mono)}.behaviorProgress small{font-size:10px;color:var(--muted);grid-column:1/-1;padding-left:13px}
+.activityCard{grid-column:1/-1;grid-row:2;padding:20px 24px;border:0;border-top:1px solid var(--hairline);border-radius:0;background:#f4f8f4;display:grid;grid-template-columns:1.2fr 1fr;gap:12px 26px;backdrop-filter:none}
+.activityCard .cameraCardTitle{margin:0}.activityCard .summary{grid-column:1;margin:0;font-size:12px}.activityCard .metrics{grid-column:2;grid-row:1/3;border:0;padding:0;margin:0;align-content:center;gap:20px}.metrics span{font-size:14px}
+.activityCard .review{margin:0;font:9px var(--mono);line-height:1.6}.activityCard .review span{font-family:Inter,'Segoe UI',sans-serif;font-size:10px}.activityCard .ranking{display:none}.sensorBar{grid-column:1/-1;margin:0;padding-top:12px;font-size:9px;border-top:1px solid var(--hairline)}
+.error{margin:10px;border-radius:2px}
+.databaseHeaderActions button{font:10px var(--mono)}
+.databaseView{padding:0 0 20px}
+.consoleTabs{display:flex;gap:24px;border-bottom:1px solid #15445a33;margin-bottom:22px}
+.consoleTabs button{border:0;border-radius:0;box-shadow:none;background:none;padding:14px 0;font-size:13px;color:#487080;border-bottom:2px solid transparent}
+.consoleTabs button[aria-pressed=true]{color:#143f56;border-bottom-color:#143f56}.consoleTabs span{font-size:9px;margin-left:8px;color:#487080}
+.consoleSearch{display:flex;gap:14px;margin-bottom:24px}.consoleSearch label{display:flex;align-items:center;gap:12px;background:#fcfdfbf0;border:1px solid var(--hairline);border-radius:3px;padding:0 14px;max-width:550px;flex:1;box-shadow:2px 2px 0 #0f17240a}.consoleSearch label>span{font-size:23px;color:#6e8d94}.consoleSearch input{font-size:12px;border:0;background:none;width:100%;padding:12px 0;outline-offset:0}.consoleSearch button{margin-left:auto;font:10px var(--mono);padding:10px 15px}
+.consoleCaption{display:flex;justify-content:space-between;font-size:9px;letter-spacing:.6px;margin-bottom:12px}
+.databaseTableWrap{border:1px solid var(--hairline);border-radius:2px;background:var(--paper);box-shadow:3px 3px 0 rgba(15,23,42,.08)}
+.databaseTable{font-size:12px}.databaseTable th{font-size:9px;letter-spacing:.6px;font-weight:500;background:#f6f8f5;color:#697d84;white-space:nowrap;padding:18px 20px;border-color:var(--hairline)}
+.databaseTable td{padding:22px 20px;border-color:var(--hairline);line-height:1.7}.databaseTable tr:hover td{background:#edf8f5}.databaseTable td:first-child{min-width:170px}.databaseTable td:nth-child(3){min-width:180px}.databaseTable time{font-size:10px}.databaseTable a{font-size:11px}.databaseTable td strong{font-weight:500}
+.decisionTable{min-width:980px}.decisionTable td:first-child{width:16%;min-width:160px}.decisionTable td:nth-child(3){width:9%;min-width:90px;font-family:var(--mono)}.decisionTable td:nth-child(4){width:38%;min-width:240px}.decisionTable td:nth-child(5){min-width:140px}.consoleTag{display:inline-block;font-size:9px;text-transform:uppercase;letter-spacing:.3px;border:1px solid #16816d30;background:#e7f5ef;color:#287765;border-radius:2px;padding:2px 6px;white-space:nowrap}
+.databaseToolbar{padding:0 0 16px;border-top:0;align-items:center}.databaseToolbar p{font-size:12px}.databaseFilters button,.databaseToolbar button{font:10px var(--mono)}
+.databaseNotice,.addItemForm{border-radius:2px;box-shadow:none}.databaseFootnote{font-size:10px}.frosted{border-radius:3px;box-shadow:3px 3px 0 rgba(15,23,42,.08)}
+@media(max-width:800px){.appShell{padding:18px 14px}.cameraHeader h1,.databaseHeader h1{font-size:23px}.cameraHeader h1>span{display:block;margin:9px 0 0}.monitor{grid-template-columns:1fr}.behaviorCard{grid-column:1;grid-row:2;border-left:0;border-top:1px solid var(--hairline);padding:22px}.activityCard{grid-row:3;grid-template-columns:1fr}.activityCard .metrics{grid-column:1;grid-row:auto}.videoWrap{aspect-ratio:4/3}.monitorNavigation{gap:10px}.databaseArrow{font-size:9px;padding:9px}.voiceBeacon{min-width:80px}.voiceBeacon .baymaxIcon{width:52px;height:52px;border-radius:13px}.beaconStatus{font-size:8px}.databaseHeaderActions .baymaxIcon{display:none}.consoleSearch input{font-size:11px}.consoleSearch button{font-size:9px}.consoleTabs{gap:18px}}
+@media(prefers-reduced-motion:reduce){.slidePage,.slidePage.current{transition:none}}
+
+.adminFooter{max-width:1400px;margin:24px auto 0;display:flex;align-items:center;justify-content:flex-end;gap:9px;color:#426f79}
+.adminFooter>span{font:8px var(--mono);letter-spacing:1px;opacity:.65}
+.adminFooter button{font:9px var(--mono);padding:5px 8px;background:#ffffff50;box-shadow:none;border-color:#16435b26}

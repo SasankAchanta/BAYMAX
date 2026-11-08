@@ -5,6 +5,7 @@ import {FocusTracker} from './focus';
 import {BehaviorTracker} from './behavior';
 import {loadModels,detectFrame,drawOverlay} from './vision';
 import './style.css';
+import './dashboard.css';
 import VoicePanel from './VoicePanel';
 import SoundMonitor from './SoundMonitor';
 import CareDatabase from './CareDatabase';
@@ -12,6 +13,7 @@ import BaymaxIcon from './BaymaxIcon';
 import {VerificationPipeline,verifyPose} from './verification';
 const empty={scores:LABELS.map(label=>({label,score:0})),summary:'Starting the camera. Allow camera access in your browser.',lyingSeconds:0,review:false};
 function App(){
+ const voiceControl=useRef();
  const video=useRef(),overlay=useRef(),stream=useRef(),models=useRef(),tracker=useRef(new ActivityTracker()),generation=useRef(0),sourceUrl=useRef(),mounted=useRef(true);
  const [result,setResult]=useState(empty),[status,setStatus]=useState('Starting…'),[error,setError]=useState(''),[running,setRunning]=useState(false),[ready,setReady]=useState(false),[cameraName,setCameraName]=useState('Webcam'),[frames,setFrames]=useState(0),[elapsed,setElapsed]=useState(0),[latency,setLatency]=useState(0),[skeleton,setSkeleton]=useState(true),[cameras,setCameras]=useState([]),[selected,setSelected]=useState('');
  const [careKit,setCareKit]=useState({items:[]}),[soundDanger,setSoundDanger]=useState(null);
@@ -101,10 +103,10 @@ function App(){
 
  return <main className="appShell monitorOnly">
  <div className="ambientGlow" aria-hidden="true"/>
- <section className={"cameraView active "+(view!=='monitor'?'isHidden':'')} aria-label="Camera / Activity Monitor">
-  <header className="cameraHeader"><div><span className="eyebrow">BAYMAX / YOUR SPACE</span><h1>Camera & activity<span className={running?'live':''}>{running?'● CAMERA / VIDEO ON':'○ CAMERA OFF'}</span></h1></div><div className="monitorNavigation"><button className="databaseArrow" onClick={()=>setView('database')} aria-label="Open Care Kit database" title="Open Care Kit database">→</button><VoicePanel soundDanger={soundDanger} result={result} mode={mode} running={running} inspect={inspectForVoice} onVoiceChange={setVoice} onCareKit={setCareKit} verified={verified} onAgentLog={recordEvent}/></div></header>
+ <div className="pageViewport" data-view={view}><section className={"cameraView slidePage "+(view==='monitor'?'current':'')} inert={view!=='monitor'} aria-hidden={view!=='monitor'} aria-label="Camera / Activity Monitor">
+  <header className="cameraHeader"><div><span className="eyebrow">BAYMAX / YOUR SPACE</span><h1>Camera & activity<span className={running?'live':''}>{running?'● CAMERA / VIDEO ON':'○ CAMERA OFF'}</span></h1></div><div className="monitorNavigation"><button className="databaseArrow" onClick={()=>setView('database')} aria-label="Open Care Kit database" title="Open Care Kit database">Database →</button><VoicePanel controlRef={voiceControl} soundDanger={soundDanger} result={result} mode={mode} running={running} inspect={inspectForVoice} onVoiceChange={setVoice} onCareKit={setCareKit} verified={verified} onAgentLog={recordEvent}/></div></header>
   <section className="monitor">
-   <div className="cameraCard frosted"><div className="cameraCardTitle"><h2>Live monitor</h2><span>Focus on what matters</span></div>
+   <div className="cameraCard"><div className="cameraCardTitle"><h2>Live monitor</h2><span>Focus on what matters</span></div>
     <div className="focusModes" role="group" aria-label="Focus mode">{[['upper','Upper Body'],['body','Full Body']].map(([key,name])=><button key={key} aria-pressed={mode===key} onClick={()=>changeMode(key)}>{name}</button>)}</div>
     <div className="modeStatus">ACTIVE MODE: {modeName}</div>
     <div className="videoWrap"><video ref={video} autoPlay muted playsInline onEnded={()=>{setRunning(false);tracker.current.reset();setResult({...empty,summary:'Video ended. Start the camera or choose another clip.'})}} onError={()=>setError('This video could not be played. Choose a browser-supported MP4 or WebM.')} /><canvas ref={overlay}/>{!running&&<div className="placeholder">{error?'CAMERA UNAVAILABLE':'WAITING FOR CAMERA'}</div>}<div className={'videoLabel '+(result.review?'danger':'')}>{modeName.toUpperCase()} / {detectorReady&&running?top?.label:'LOADING DETECTOR'}{detectorReady&&running&&<span>{top?.score}%</span>}</div></div>
@@ -112,8 +114,8 @@ function App(){
     {error&&<p role="alert" className="error">{error}</p>}
 
    </div>
-   <section className={'behaviorCard frosted '+(behaviorAlert?'behaviorAlert':'')} aria-label="Current behavior">
-    <div className="cameraCardTitle"><h2>Current behavior</h2><span>{modeName}</span></div>
+   <section className={'behaviorCard '+(behaviorAlert?'behaviorAlert':'')} aria-label="Current behavior">
+    <div className="cameraCardTitle"><h2>Behavior & status</h2><span>{modeName}</span></div>
     <div className="behaviorPrimary" role="status" aria-live="polite" aria-atomic="true">
      <h3>{behaviorLabel}</h3>{currentCandidate&&!currentCandidate.issue&&<p className="observingBehavior">Observing · not an issue yet</p>}
      {behaviorReady&&<div className="behaviorConfidence"><strong>{Math.round(top.score)}<span>%</span></strong><span>Detection confidence</span></div>}
@@ -121,9 +123,9 @@ function App(){
     {behaviorReady&&<div className="behaviorMeter" aria-hidden="true"><span style={{width:`${top.score}%`}}/></div>}
     <p className="behaviorDescription">{!running?'Start the camera to see live activity.':result.summary}</p>
     
-    {mode==='upper'&&<div className="behaviorProgress" aria-label="Upper body behavior tracking">{['CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING'].map(label=>{const candidate=result.behaviorCandidates?.find(c=>c.label===label);return <div key={label} className={candidate?'observed':''}><span>{label.replaceAll('_',' ').toLowerCase()}</span><strong>{candidate?`${(candidate.held_ms/1000).toFixed(1)}s / >2s`:'—'}</strong><small>{candidate?(candidate.issue?'Awaiting visual verification':'Observing · not an issue yet'):'Not observed'}</small></div>})}</div>}
+    {<div className="behaviorProgress" aria-label="Upper body behavior tracking">{['CLENCHING_STOMACH','HOLDING_CHEST','COUGHING','SNEEZING'].map(label=>{const candidate=result.behaviorCandidates?.find(c=>c.label===label);return <div key={label} className={candidate?'observed':''}><span>{label.replaceAll('_',' ').toLowerCase()}</span><strong>{candidate?`${(candidate.held_ms/1000).toFixed(1)}s / >2s`:'—'}</strong><small>{candidate?(candidate.issue?'Awaiting visual verification':'Observing · not an issue yet'):'Not observed'}</small></div>})}</div>}
    </section>
-   <aside className="activityCard frosted"><div className="cameraCardTitle"><h2>Activity insights</h2><span className="liveDot"/></div><p className="summary" aria-live="polite">{result.summary}</p>
+   <aside className="activityCard"><div className="cameraCardTitle"><h2>Activity insights</h2><span className="liveDot"/></div><p className="summary" aria-live="polite">{result.summary}</p>
     <div className="metrics"><div>INFERENCE<span>{latency?`${Math.round(latency)} MS`:'—'}</span></div><div>LYING TIMER<span>{result.lyingSeconds.toFixed(1)} / 15 S</span></div></div>
     {<div className={'review '+(result.review?'danger':'')} role="status">{result.review?'PROLONGED LYING · AWAITING VERIFICATION':result.lyingSeconds>0?'LYING DOWN · OBSERVING':'LOCAL MONITORING ACTIVE'}<span>{result.review?'Check-in requested; Stage 2 verifies the visual evidence in parallel.':'Watching posture and movement.'}</span></div>}
     <div className="ranking">{result.scores.filter(s=>s.score>0).slice(0,3).map(({label,score},i)=><div key={label} className={'row '+(i===0?'leading ':'')+(score>0&&(label==='FALL_DETECTED'||label==='LYING_TOO_LONG')?'danger':'')}><div className="bar" style={{width:`${score}%`}}/><span>{score.toFixed(1)}%</span><strong>{label}</strong></div>)}</div>
@@ -131,8 +133,9 @@ function App(){
    </aside>
   </section>
  </section>
- <CareDatabase active={view==='database'} revision={careKit} speaking={speaking} onBack={()=>setView('monitor')}/>
+ <CareDatabase active={view==='database'} logs={agentLogs} revision={careKit} speaking={speaking} onBack={()=>setView('monitor')}/></div>
  <SoundMonitor paused={!voice.enabled} speaking={speaking} running={running} onDanger={setSoundDanger} onLog={recordEvent}/>
+ <footer className="adminFooter"><span>ADMIN</span><button onClick={()=>voice.enabled?voiceControl.current?.disable():voiceControl.current?.enable()}>{voice.enabled?'Stop listening':'Resume listening'}</button></footer>
  </main>;
 
 }
