@@ -15,15 +15,15 @@ test('camera, browser YOLO inference, stop and restart work without backend',asy
  page.on('response',r=>{if(r.url().includes('/runtime/')&&!r.ok())failedAssets.push(r.url())});
  const faults=[];page.on('pageerror',e=>faults.push(e.message));
  await page.goto('/');
- await expect(page.locator('header')).toContainText('CAMERA / VIDEO ON',{timeout:20000});
+ await expect(page.locator('.cameraHeader')).toContainText('CAMERA / VIDEO ON',{timeout:20000});
  await expect(page.locator('.bottom')).toContainText('local inference',{timeout:90000});
  await expect.poll(async()=>Number(await page.locator('.metrics>div').nth(1).locator('span').textContent()),{timeout:60000}).toBeGreaterThan(0);
- await expect(page.locator('.summary')).toContainText('No person detected');
+ await expect(page.locator('.summary')).toContainText('Move your shoulders and upper body into view');
  await page.screenshot({path:'tests/fixtures/browser-monitor.png',fullPage:true});
  await page.getByRole('button',{name:'Stop',exact:true}).click();
- await expect(page.locator('header')).toContainText('CAMERA OFF');
+ await expect(page.locator('.cameraHeader')).toContainText('CAMERA OFF');
  await page.getByRole('button',{name:'Start camera',exact:true}).click();
- await expect(page.locator('header')).toContainText('CAMERA / VIDEO ON');
+ await expect(page.locator('.cameraHeader')).toContainText('CAMERA / VIDEO ON');
  const detections=await page.evaluate(async()=>{
   const {loadModels,detectFrame}=await import('/src/vision.js');
   const image=new Image();image.src='/tests/fixtures/person.jpg';await image.decode();
@@ -62,29 +62,17 @@ test('WebGPU distribution loads asyncify modules and executes WASM inference',as
 });
 
 
-test('focus modes switch without restarting camera and real face blendshapes run',async({page})=>{
+test('Upper Body is default and only Full Body remains as alternative without camera restart',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const faceRequests=[];page.on('request',r=>{if(r.url().includes('face_landmarker.task'))faceRequests.push(r.url())});
  await page.goto('/');
  await expect(page.locator('.bottom')).toContainText('local inference',{timeout:90000});
- expect(faceRequests).toEqual([]);
- await page.getByRole('button',{name:'Arm / Hand',exact:true}).click();
- await expect(page.locator('.modeStatus')).toContainText('Arm / Hand');
- await expect(page.locator('.videoLabel')).toContainText('ARM / HAND');
- await page.getByRole('button',{name:'Face / Head',exact:true}).click();
- await expect(page.locator('.bottom')).toContainText('MediaPipe Face',{timeout:60000});
- await expect(page.locator('.summary')).toContainText('Move your face into view',{timeout:20000});
- expect(faceRequests.length).toBeGreaterThan(0);
- const detected=await page.evaluate(async()=>{
-  const {loadFaceModel}=await import('/src/face.js');
-  const image=new Image();image.src='/tests/fixtures/face.jpg';await image.decode();
-  const model=await loadFaceModel();const result=model.detectForVideo(image,performance.now()+1);
-  return {landmarks:result.faceLandmarks[0]?.length,blendshapes:result.faceBlendshapes[0]?.categories.map(c=>c.categoryName)};
- });
- expect(detected.landmarks).toBeGreaterThan(400);
- expect(detected.blendshapes).toEqual(expect.arrayContaining(['eyeBlinkLeft','eyeBlinkRight','mouthSmileLeft','mouthFrownRight','browInnerUp']));
+ await expect(page.getByRole('button',{name:'Upper Body',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('group',{name:'Focus mode'}).getByRole('button')).toHaveCount(2);
+ const id=await page.evaluate(()=>document.querySelector('video').srcObject.id);
  await page.getByRole('button',{name:'Full Body',exact:true}).click();
- await expect(page.locator('.bottom')).toContainText('YOLO11',{timeout:20000});
- await expect(page.locator('header')).toContainText('CAMERA / VIDEO ON');
+ await expect(page.locator('.modeStatus')).toContainText('Full Body');
+ await page.getByRole('button',{name:'Upper Body',exact:true}).click();
+ await expect(page.locator('.videoLabel')).toContainText('UPPER BODY');
+ expect(await page.evaluate(()=>document.querySelector('video').srcObject.id)).toBe(id);
  expect(errors).toEqual([]);
 });

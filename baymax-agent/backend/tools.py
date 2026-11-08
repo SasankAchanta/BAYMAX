@@ -1,15 +1,11 @@
+from .care_database import save_recommendations
+from .demo_contact import notify as notify_demo_contact
 import os
 from .decision_log import log_decision
 from datetime import datetime, timedelta, timezone
 import httpx
 
-CATALOG = {
-    "tissues": {"name": "Soft facial tissues", "price": 2.99, "guidance": "Single use; dispose after use and wash hands."},
-    "bandages": {"name": "Sterile adhesive bandages", "price": 4.99, "guidance": "For small superficial cuts; follow package directions."},
-    "saline": {"name": "Sterile saline wound wash", "price": 6.49, "guidance": "External use; follow the product label."},
-    "cold pack": {"name": "Reusable cold pack", "price": 8.99, "guidance": "Wrap in a cloth; avoid direct contact with skin."},
-    "thermometer": {"name": "Digital thermometer", "price": 9.99, "guidance": "Use according to manufacturer instructions."},
-}
+from .care import CATALOG, catalog_items
 
 class Tools:
     def __init__(self, emit, vision):
@@ -17,31 +13,18 @@ class Tools:
         self.items = []
 
     async def trigger_emergency_alert(self, reason):
-        result = {"mode": "simulated", "reason": reason, "message": "DUMMY EMERGENCY TRIGGERED — no emergency services contacted"}
-        if os.getenv("ENABLE_REAL_ALERTS", "false").lower() == "true":
-            sid, token, sender, recipient = [os.getenv(k) for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER", "DEMO_EMERGENCY_PHONE")]
-            if not all((sid, token, sender, recipient)):
-                result["error"] = "Demo SMS configuration incomplete; nothing sent."
-            else:
-                try:
-                    async with httpx.AsyncClient(timeout=15) as client:
-                        response = await client.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, token), data={"From": sender, "To": recipient, "Body": f"BAYMAX DEMO safety alert: {reason}. This is a prototype test."})
-                        response.raise_for_status()
-                    result.update(mode="demo_sms", message="Demo SMS sent to configured contact")
-                except Exception:
-                    result["error"] = "SMS delivery failed; no delivery confirmed."
-        log_decision("alert", symptoms=reason, next_steps=result.get("error") or result["message"])
-        await self.emit("alert", result)
+        result=await notify_demo_contact('SAFETY_ALERT',reason)
+        result['reason']=reason
+        log_decision('alert',symptoms=reason,next_steps=result['message'])
+        await self.emit('alert',result)
         return result
 
     async def fetch_care_kit_items(self, symptom, items):
-        selected = []
-        for key in items[:8]:
-            if key.lower() in CATALOG:
-                selected.append({"id": key.lower(), **CATALOG[key.lower()], "currency": "USD", "price_source": "illustrative mock catalog", "dosage": "Not applicable — non-drug supply", "url": "https://www.fda.gov/consumers/consumer-updates", "order_executed": False})
+        selected = catalog_items(items)
         self.items = selected
         result = {"symptom": symptom, "items": selected, "order_executed": False}
         log_decision("care_kit", symptoms=symptom, items=[i["name"] for i in selected], next_steps="Review only; no purchase executed.")
+        await save_recommendations(result,symptom)
         await self.emit("care_kit", result)
         return result
 
@@ -68,7 +51,7 @@ class Tools:
 SCHEMAS = [
     {"type": "function", "function": {"name": name, "description": desc, "parameters": {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}}}
     for name, desc, props in [
-        ("fetch_care_kit_items", "Display review-only mock non-drug supplies. Never order.", {"symptom": {"type": "string"}, "items": {"type": "array", "items": {"type": "string", "enum": list(CATALOG)}}}),
+        ("fetch_care_kit_items", "Display specific review-only OTC or first-aid catalog items. Medicines require label/pharmacist suitability checks. Never order.", {"symptom": {"type": "string"}, "items": {"type": "array", "items": {"type": "string", "enum": list(CATALOG)}}}),
         ("schedule_doctor_followup", "Suggest a mock follow-up; no actual booking.", {"urgency": {"type": "string"}, "notes": {"type": "string"}}),
         ("inspect_user_visually", "Inspect the latest camera image; only if user requests visual inspection.", {"question": {"type": "string"}}),
     ]

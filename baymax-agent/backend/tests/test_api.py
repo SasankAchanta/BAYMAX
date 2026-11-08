@@ -2,7 +2,11 @@ from fastapi.testclient import TestClient
 from backend.main import app
 
 
-def test_websocket_demo_flow():
+def test_websocket_demo_flow(monkeypatch):
+    # This exercises the deterministic demo flow regardless of local developer credentials.
+    monkeypatch.delenv('NVIDIA_API_KEY',raising=False)
+    monkeypatch.setenv('ENABLE_CAMERA','false')
+    monkeypatch.setenv('ENABLE_REAL_ALERTS','false')
     with TestClient(app) as client:
         health = client.get('/health')
         assert health.status_code == 200

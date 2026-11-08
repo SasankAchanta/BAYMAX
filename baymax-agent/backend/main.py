@@ -1,3 +1,6 @@
+from .care_database import router as care_database_router
+from .checkins import router as checkins_router
+from .verification import router as verification_router
 import asyncio
 import json
 import os
@@ -14,6 +17,7 @@ from .tools import Tools
 from .agent import Agent, ProactiveVision, proactive_vision_enabled
 from .voice import is_acknowledgement
 from .voice_turn import router as voice_router
+from .tts import router as tts_router, tts_lifespan
 
 load_dotenv(Path(__file__).with_name('.env'))
 clients = set()
@@ -84,7 +88,8 @@ async def lifespan(app):
     if proactive_vision_enabled():
         task = asyncio.create_task(proactive.run())
     try:
-        yield
+        async with tts_lifespan(app):
+            yield
     finally:
         vision.stop()
         pending = [t for t in (task, safety.task) if t]
@@ -95,6 +100,7 @@ async def lifespan(app):
 
 app = FastAPI(title="Baymax safety companion", lifespan=lifespan)
 app.include_router(voice_router)
+app.include_router(tts_router)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["*"])
 
 @app.get('/health')
@@ -169,3 +175,9 @@ async def websocket(socket: WebSocket):
         clients.discard(socket)
         for task in tasks:
             task.cancel()
+
+app.include_router(verification_router)
+
+app.include_router(checkins_router)
+
+app.include_router(care_database_router)

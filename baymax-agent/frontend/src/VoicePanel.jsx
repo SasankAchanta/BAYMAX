@@ -1,13 +1,41 @@
 import React,{useEffect,useRef,useState} from 'react';
+import BaymaxIcon from './BaymaxIcon';
 import {VoiceLoop,dangerState} from './voiceLoop';
-export default function VoicePanel({result,mode,running,inspect}){
- const current=useRef();current.current={result,mode,inspect};
+import {AnomalyGate} from './temporal';
+import {SafetyCheck,SAFETY_OPENINGS,needsHelp} from './safety';
+export default function VoicePanel({soundDanger,result,mode,running,inspect,onVoiceChange,onConversationStart,onCareKit,verified,onAgentLog}){
+ const current=useRef();current.current={result,mode,inspect,onVoiceChange,onConversationStart,onCareKit,onAgentLog};
  const [voice,setVoice]=useState({state:'IDLE',enabled:false,active:false,message:'Starting hands-free wake listening…'});
- const loop=useRef();
- useEffect(()=>{const controller=new VoiceLoop({host:window,onChange:setVoice,inspect:(request,signal)=>current.current.inspect(request,signal),getVision:()=>{
+ const loop=useRef(),safety=useRef(),gate=useRef(new AnomalyGate()),sourceEpoch=useRef(0),wasRunning=useRef(false);
+ const [checkIn,setCheckIn]=useState(null);
+ useEffect(()=>{const checks=new SafetyCheck({onChange:setCheckIn,onLog:entry=>current.current.onAgentLog?.(entry),onPrompt:text=>loop.current?.safetyCheckIn(text),onEscalate:(text,options)=>loop.current?.safetyCheckIn(text,!options?.final)});safety.current=checks;const controller=new VoiceLoop({host:window,onTranscript:text=>{const help=needsHelp(text,checks.incident?.status==='AWAITING_RESPONSE'&&!['LIMPING','HOPPING','GUARDING_ARM'].includes(checks.incident?.action));checks.respond(text);return help?'help_requested':false},onChange:state=>{setVoice(state);current.current.onVoiceChange?.(state)},onConversationStart:()=>current.current.onConversationStart?.(),onCareKit:kit=>current.current.onCareKit?.(kit),inspect:(request,signal)=>current.current.inspect(request,signal),getVision:()=>{
   const {result,mode}=current.current;const top=result.scores[0];
   return {mode,action:top?.label||'UNKNOWN',confidence:top?.score||0,danger:dangerState(result),summary:result.summary.slice(0,1500)};
- }});loop.current=controller;controller.enable();return()=>controller.destroy()},[]);
- useEffect(()=>{loop.current?.observe(running&&dangerState(result))},[result,running,voice.enabled]);
- return <section className="voicePanel" aria-label="Baymax voice assistant"><div className="voiceHeading"><strong>BAYMAX VOICE</strong><span className={'voiceStatus '+voice.state.toLowerCase()} role="status">● {voice.state}</span></div><p className="voiceMessage" aria-live="polite">{voice.message||({SPEAKING:'Baymax is speaking. Microphone paused.',LISTENING:'Listening to your response…',THINKING:'Baymax is thinking…',IDLE:'Ready for a check-in.'}[voice.state])}</p><div className="voiceButtons"><button onClick={()=>voice.enabled?loop.current.disable():loop.current.enable()}>{voice.enabled?'Pause / Mute Voice':'Resume Voice'}</button><button disabled={!voice.active} onClick={()=>loop.current.end()}>End Conversation</button></div><small>Voice uses your browser’s speech services. Transcripts and recent turns go to the local voice API and NVIDIA. Requested camera frames go to NVIDIA for checkups. Decisions are saved locally to baymax_decisions.txt; audio and images are not saved.</small></section>
+ }});loop.current=controller;controller.enable();return()=>{checks.destroy();controller.destroy()}},[]);
+ useEffect(()=>{
+  if(!running){if(wasRunning.current)sourceEpoch.current++;wasRunning.current=false;gate.current.reset();return}
+  wasRunning.current=true;
+  const candidate=gate.current.update(result.monitoring||result,performance.now());
+  if(candidate)safety.current?.start({id:'pose-'+sourceEpoch.current+'-'+candidate.id,action:candidate.action,summary:result.summary});
+ },[result,running]);
+ useEffect(()=>{if(soundDanger)safety.current?.start(soundDanger)},[soundDanger]);
+ useEffect(()=>{if(verified?.confirmed)safety.current?.start({id:'verified-'+verified.id,action:verified.pose_action,summary:verified.summary})},[verified]);
+ useEffect(()=>{if(voice.enabled&&safety.current?.incident?.status==='AWAITING_RESPONSE')loop.current?.safetyCheckIn(SAFETY_OPENINGS[safety.current.incident.action]||'Are you okay?')},[voice.enabled]);
+ useEffect(()=>{
+  const editable=e=>e.target?.closest?.('input,textarea,select,[contenteditable=true]');
+  const down=e=>{if(e.code==='Space'&&!e.repeat&&!editable(e)&&!e.altKey&&!e.ctrlKey&&!e.metaKey){e.preventDefault();loop.current?.startPushToTalk()}};
+  const up=e=>{if(e.code==='Space'&&!editable(e)){e.preventDefault();loop.current?.stopPushToTalk()}};
+  const blur=()=>loop.current?.stopPushToTalk();window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',blur);
+  return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',blur)};
+ },[]);
+ const sending=checkIn?.status==='CONTACTING';
+ const light=sending?'sending':!voice.active?'idle':voice.state==='LISTENING'?'listening':voice.state==='THINKING'?'received':'speaking';
+ const status=sending?'Sending help request':voice.active?({LISTENING:'Listening to you',THINKING:'Response received',SPEAKING:'Baymax is speaking'}[voice.state]||'Here with you'):'Say “Hey Baymax”';
+ const blocked=!voice.enabled;
+ return <div className="voiceBeacon" aria-label="Baymax voice assistant">
+  <BaymaxIcon speaking={voice.state==='SPEAKING'} light={light}/>
+  <span className="beaconStatus" role="status" aria-live="polite">{status}</span>
+  {blocked&&<button className="voicePermission" onClick={()=>loop.current?.enable()}>Enable microphone</button>}
+  <span className="srOnly" aria-live="polite">{checkIn?.contact?.message||voice.message}</span>
+ </div>;
 }

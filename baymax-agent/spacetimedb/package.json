@@ -1,0 +1,1 @@
+{"name":"baymax-care-database","version":"1.0.0","private":true,"type":"module","dependencies":{"spacetimedb":"2.14.1"},"devDependencies":{"typescript":"^5.9.0"},"scripts":{"check":"tsc --noEmit"}}

@@ -1,5 +1,6 @@
+import {TemporalPose} from './temporal.js';
 // Activity scores are heuristic evidence scores, not a trained action classifier.
-export const LABELS = ['USING AN OBJECT', 'WALKING', 'STANDING', 'SITTING', 'LYING / RESTING', 'POSSIBLE FALL · REVIEW', 'UNCLEAR / OTHER', 'NO PERSON VISIBLE'];
+export const LABELS = ['USING AN OBJECT', 'WALKING', 'STANDING', 'SITTING', 'LYING_DOWN', 'LYING_TOO_LONG', 'FALL_DETECTED', 'UNCLEAR / OTHER', 'NO PERSON VISIBLE'];
 const clamp = v => Math.max(0, Math.min(100, v));
 const mid = (a,b) => [(a[0]+b[0])/2,(a[1]+b[1])/2,Math.min(a[2],b[2])];
 const dist = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1]);
@@ -10,15 +11,16 @@ function angle(a,b,c){
 }
 export class ActivityTracker {
  constructor(){this.reset()}
- reset(){this.history=[];this.lyingSince=null;this.lastTime=null;this.previous=null;this.lastObject=null;this.holdSince=null;this.holdName=null}
+ reset(){this.temporal=new TemporalPose();this.history=[];this.lyingSince=null;this.lastTime=null;this.previous=null;this.lastObject=null;this.holdSince=null;this.holdName=null}
  update({now,person,points,objects=[]}){
   const scores=Object.fromEntries(LABELS.map(l=>[l,0]));
   const gap=this.lastTime!==null&&(now-this.lastTime>2500||now<this.lastTime);
   if(gap){this.history=[];this.lyingSince=null;this.previous=null;this.holdSince=null}
   this.lastTime=now;
   const finish=(summary,extra={})=>({scores:Object.entries(scores).map(([label,score])=>({label,score:Math.round(clamp(score))})).sort((a,b)=>b.score-a.score),summary,lyingSeconds:this.lyingSince===null?0:(now-this.lyingSince)/1000,review:false,...extra});
-  if(!person){this.history=[];this.lyingSince=null;this.previous=null;this.holdSince=null;this.holdName=null;scores['NO PERSON VISIBLE']=100;return finish('No person detected. Move into the camera view.')}
-  if(!points||![5,6,11,12].every(i=>visible(points[i]))){this.lyingSince=null;this.history=[];this.holdSince=null;this.holdName=null;scores['UNCLEAR / OTHER']=100;return finish('Person visible; shoulders or hips are obscured. Show more of your body.')}
+  if(!person){this.history=[];this.lyingSince=null;this.previous=null;this.holdSince=null;this.holdName=null;this.temporal.reset();scores['NO PERSON VISIBLE']=100;return finish('No person detected. Move into the camera view.')}
+  if(!points||![5,6,11,12].every(i=>visible(points[i]))){this.lyingSince=null;this.history=[];this.holdSince=null;this.holdName=null;this.temporal.reset();scores['UNCLEAR / OTHER']=100;return finish('Person visible; shoulders or hips are obscured. Show more of your body.')}
+  const temporal=this.temporal.update(now,person,points);points=temporal.points;
   const shoulder=mid(points[5],points[6]),hip=mid(points[11],points[12]);
   const torso=Math.max(25,dist(shoulder,hip)),height=person.y2-person.y1,width=person.x2-person.x1;
   const center=[(person.x1+person.x2)/2,(person.y1+person.y2)/2];
@@ -29,7 +31,7 @@ export class ActivityTracker {
   this.previous={center,height};
   const quality=Math.min(person.conf,...[5,6,11,12].map(i=>points[i][2]))*100;
   const tilt=Math.abs(shoulder[0]-hip[0])/torso;
-  const lying=tilt>.72 && (width/Math.max(1,height)>.95 || tilt>.9);
+  const lying=temporal.lying;
   if(lying){if(this.lyingSince===null)this.lyingSince=now}else this.lyingSince=null;
   this.history.push({now,hip:hip.slice(0,2),left:visible(points[15])?points[15][0]-hip[0]:null,right:visible(points[16])?points[16][0]-hip[0]:null});
   this.history=this.history.filter(p=>now-p.now<=1800);
@@ -43,7 +45,8 @@ export class ActivityTracker {
   const bent=legAngles.some(a=>a<135);
   const standing=!lying&&legAngles.length>0&&legAngles.every(a=>a>150)&&hip[1]>shoulder[1];
   const sitting=!lying&&bent;
-  if(lying)scores['LYING / RESTING']=quality;
+  if(temporal.fall)scores.FALL_DETECTED=quality;
+  else if(lying)scores.LYING_DOWN=quality;
   else if(walking)scores['WALKING']=Math.min(quality,65+travel*50+reversals*8);
   else if(sitting)scores['SITTING']=quality;
   else if(standing)scores['STANDING']=quality;
@@ -67,10 +70,10 @@ export class ActivityTracker {
   }else{this.holdSince=null;this.holdName=null}
   const seconds=this.lyingSince===null?0:(now-this.lyingSince)/1000;
   const review=lying&&seconds>15;
-  if(review){scores['POSSIBLE FALL · REVIEW']=quality;scores['LYING / RESTING']=Math.min(quality,49)}
+  if(review&&!temporal.fall){scores.LYING_TOO_LONG=quality;scores.LYING_DOWN=Math.min(quality,49)}
   let summary=lying?`Horizontal posture. Lying / resting for ${seconds.toFixed(1)} seconds.`:walking?'Movement across frames is consistent with walking.':sitting?'Bent knees and upright torso are consistent with sitting.':standing?'Upright torso and extended legs are consistent with standing.':'Posture unclear. Keep shoulders, hips, knees and feet in view.';
   if(held&&scores['USING AN OBJECT'])summary+=` Possible holding / using: ${held.name}.`;
   if(review)summary+=' More than 15 continuous seconds lying down: possible fall, under review.';
-  return finish(summary,{review,held:held&&scores['USING AN OBJECT']?held:null,person,points});
+  return finish(summary,{review,temporal:{drop_velocity:temporal.dropVelocity,horizontal_ms:temporal.horizontalMs},held:held&&scores['USING AN OBJECT']?held:null,person,points});
  }
 }

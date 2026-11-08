@@ -14,3 +14,18 @@ baymax-agent/frontend/tests/fixtures/browser-monitor.png
 
 # Private health decision history
 baymax_decisions.txt
+
+# Local voice reference and model caches
+baymax-agent/backend/baymax_ref.wav
+baymax-agent/backend/.model-cache/
+
+baymax-agent/frontend/tests/fixtures/dashboard-*.png
+baymax-agent/frontend/tests/fixtures/monitor-*.png
+
+baymax-agent/frontend/tests/fixtures/always-on-*.png
+
+# Local database binaries, identities and private data
+.tools/
+.spacetime/
+baymax-agent/spacetimedb/.spacetime/
+baymax-agent/frontend/tests/fixtures/database-*.png

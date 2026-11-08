@@ -2,6 +2,7 @@ const visible=p=>p&&p[2]>=.4;
 const distance=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
 const mean=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
 const range=v=>Math.max(...v)-Math.min(...v);
+const oscillations=v=>{let turns=0,last=0;for(let i=1;i<v.length;i++){const d=v[i]-v[i-1],sign=Math.abs(d)>.018?Math.sign(d):0;if(sign&&last&&sign!==last)turns++;if(sign)last=sign}return turns};
 const ranked=s=>Object.entries(s).map(([label,score])=>({label,score:Math.round(Math.max(0,Math.min(100,score)))})).sort((a,b)=>b.score-a.score);
 export class FocusTracker {
  constructor(){this.reset()}
@@ -21,7 +22,7 @@ export class FocusTracker {
   const headIds=[0,3,4].filter(i=>visible(points[i]));
   const head=headIds.length?headIds.reduce((sum,i)=>sum+points[i][1],0)/headIds.length:null;
   const legs=[11,12,15,16].every(i=>visible(points[i]));
-  this.history.push({now,head:head===null?null:(head-shoulders[1])/torso,center:shoulders.map(v=>v/torso),left:legs?(points[15][1]-points[11][1])/torso:null,right:legs?(points[16][1]-points[12][1])/torso:null});
+  this.history.push({now,head:head===null?null:(head-shoulders[1])/torso,center:shoulders.map(v=>v/torso),left:legs?(points[15][1]-points[11][1])/torso:null,right:legs?(points[16][1]-points[12][1])/torso:null,lh:legs?points[11][1]/torso:null,rh:legs?points[12][1]/torso:null,la:legs?points[15][1]/torso:null,ra:legs?points[16][1]/torso:null,hy:hip?hip[1]/torso:null});
   this.history=this.history.filter(h=>now-h.now<=2500);
   const quality=Math.min(person.conf,...required.map(i=>points[i][2]))*100;
   if(arm){
@@ -38,20 +39,31 @@ export class FocusTracker {
    scores[guarding?'GUARDING_ARM':raised?'ARM_RAISED':complete?'ARMS_RELAXED':'ARMS UNCLEAR']=guarding?guardQuality:quality;
    return {...base,scores:ranked(scores),review:false,lyingSeconds:0,summary:guarding?'Wrist held near the chest / torso for over 1.5 seconds. Guarding-arm posture; this does not establish pain or injury.':raised?'Wrist raised above shoulder height.':complete?'Visible arms are not in a sustained guarding posture.':'Elbows or wrists are obscured. Move them into view.'};
   }
-  const scores=Object.fromEntries(base.scores.map(s=>[s.label,s.score]));scores.SITTING_HEAD_DOWN=0;scores.LIMPING=0;
+  const scores=Object.fromEntries(base.scores.map(s=>[s.label,s.score]));scores.SITTING_HEAD_DOWN=0;scores.LIMPING=0;scores.HOPPING=0;
   const seated=(scores.SITTING||0)>0;
   const validHeads=this.history.filter(h=>h.head!==null);
   const stationary=validHeads.length>=1&&validHeads.length===this.history.length&&range(validHeads.map(h=>h.head))<.08&&range(this.history.map(h=>h.center[0]))<.10&&range(this.history.map(h=>h.center[1]))<.10;
   if(seated&&head!==null&&head>=shoulders[1]-.08*torso&&stationary){this.headSince??=now}else this.headSince=null;
   let summary=base.summary;
   if(this.headSince!==null&&now-this.headSince>3000){scores.SITTING_HEAD_DOWN=Math.min(quality,...headIds.map(i=>points[i][2]*100));scores.SITTING*=.5;summary+=' Head held near / below shoulder height while seated and stationary for over 3 seconds.'}
-  // Compare dynamic leg excursion, not a static difference in leg length.
   const samples=this.history.filter(h=>h.left!==null&&h.right!==null);
   const span=samples.length?now-samples[0].now:0;
-  if(legs&&samples.length>=4&&samples.length===this.history.length&&span>=2400&&!base.review&&(scores.WALKING||0)>0){
+  if(legs&&samples.length>=6&&samples.length===this.history.length&&span>=2400&&!base.review){
    const left=range(samples.map(h=>h.left)),right=range(samples.map(h=>h.right));
-   const max=Math.max(left,right),min=Math.min(left,right),asymmetry=(max-min)/(max||1);
-   if(max>.10&&asymmetry>.5){scores.LIMPING=Math.min(quality,60+asymmetry*35,...[11,12,15,16].map(i=>points[i][2]*100));scores.WALKING*=.5;summary+=' Asymmetric leg movement over a 2.5-second window: possible limping pattern.'}
+   const lHip=range(samples.map(h=>h.lh)),rHip=range(samples.map(h=>h.rh));
+   const elevated=samples.map(h=>h.ra-h.la);
+   const leftRaised=elevated.filter(d=>d>.15).length/samples.length>.85;
+   const rightRaised=elevated.filter(d=>d<-.15).length/samples.length>.85;
+   const support=samples.map(h=>leftRaised?h.ra:h.la),hips=samples.map(h=>h.hy);
+   const hopping=(leftRaised||rightRaised)&&range(support)>.07&&range(hips)>.08&&oscillations(hips)>=3&&oscillations(support)>=2;
+   const gaitQuality=Math.min(quality,...[11,12,15,16].map(i=>points[i][2]*100));
+   if(hopping){scores.HOPPING=gaitQuality;scores.WALKING*=.4;summary+=' One ankle stays raised while the hips and supporting leg repeatedly bounce: hopping pattern.'}
+   else if((scores.WALKING||0)>0){
+    const half=Math.floor(samples.length/2),windows=[samples.slice(0,half),samples.slice(half)];
+    const consistent=windows.every(w=>{const a=range(w.map(h=>h.left)),b=range(w.map(h=>h.right));return Math.max(a,b)>.04&&((a>b)===(left>right))&&Math.abs(a-b)/Math.max(a,b)>.35});
+    const ankleAsym=Math.abs(left-right)/Math.max(left,right,.001),hipAsym=Math.abs(lHip-rHip)/Math.max(lHip,rHip,.001);
+    if((Math.max(left,right)>.10&&ankleAsym>.5&&consistent)||(Math.max(lHip,rHip)>.1&&hipAsym>.55&&windows.every(w=>range(w.map(h=>h.lh))>.04||range(w.map(h=>h.rh))>.04))){scores.LIMPING=gaitQuality;scores.WALKING*=.4;summary+=' Consistent asymmetric hip/ankle movement over a 2.5-second rolling window: possible limping.'}
+   }
   }
   return {...base,scores:ranked(scores),summary};
  }
